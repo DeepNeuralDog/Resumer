@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume Maker</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0; padding: 0; }
+    .container { max-width: 700px; margin: 40px auto; background: #fff; padding: 32px; border-radius: 10px; box-shadow: 0 2px 8px #0001; }
+    h1 { text-align: center; }
+    label { display: block; margin-top: 16px; font-weight: bold; }
+    input, textarea { width: 100%; padding: 8px; margin-top: 4px; border-radius: 4px; border: 1px solid #ccc; }
+    textarea { min-height: 40px; }
+    button { margin-top: 20px; padding: 10px 20px; border: none; background: #222; color: #fff; border-radius: 4px; cursor: pointer; }
+    .actions { display: flex; gap: 10px; }
+    .preview { margin-top: 32px; text-align: center; }
+    iframe { width: 100%; height: 600px; border: 1px solid #ccc; }
+    .section-list { margin-top: 20px; }
+    .item-block { background: #f9f9f9; padding: 16px; margin: 8px 0; border-radius: 4px; position: relative; }
+    .remove-btn { position: absolute; top: 10px; right: 10px; background: #e74c3c; border: none; color: white; padding: 5px 10px; border-radius: 3px; cursor: pointer; }
+    .add-btn { margin-top: 10px; padding: 10px 15px; border: none; background: #007bff; color: white; border-radius: 4px; cursor: pointer; }
+    fieldset { border: 1px solid #ccc; border-radius: 4px; padding: 16px; margin-top: 16px; }
+    legend { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Resume Maker</h1>
+    <form id="resume-form">
+      <label>Name <input name="name" required></label>
+      <fieldset>
+        <legend>Contact</legend>
+        <label>Email <input name="contact_email"></label>
+        <label>LinkedIn <input name="contact_linkedin"></label>
+        <label>GitHub <input name="contact_github"></label>
+        <label>Phone <input name="contact_phone"></label>
+      </fieldset>
+      <div class="section-list" id="skills-section">
+        <h3>Skills</h3>
+      </div>
+      <button type="button" class="add-btn" onclick="addSkill()">Add Skill</button>
+      <div class="section-list" id="experience-section">
+        <h3>Experience</h3>
+      </div>
+      <button type="button" class="add-btn" onclick="addExperience()">Add Experience</button>
+      <div class="section-list" id="projects-section">
+        <h3>Projects</h3>
+      </div>
+      <button type="button" class="add-btn" onclick="addProject()">Add Project</button>
+      <div class="section-list" id="education-section">
+        <h3>Education</h3>
+      </div>
+      <button type="button" class="add-btn" onclick="addEducation()">Add Education</button>
+      <div class="section-list" id="references-section">
+        <h3>References</h3>
+      </div>
+      <button type="button" class="add-btn" onclick="addReference()">Add Reference</button>
+      <div class="actions">
+        <button type="button" onclick="generatePDF()">Preview/Download PDF</button>
+        <button type="button" onclick="downloadJSON()">Download JSON</button>
+      </div>
+    </form>
+    <div class="preview" id="preview"></div>
+  </div>
+  <script>
+    // --- Dynamic Section Logic ---
+    function createListInput(name, placeholder) {
+      return `<textarea name="${name}" placeholder="One per line"></textarea>`;
+    }
+    function removeItem(section, idx) {
+      document.getElementById(section+'-'+idx).remove();
+    }
+    let skillCount = 0, expCount = 0, projCount = 0, eduCount = 0, refCount = 0;
+    function addSkill(skill={}) {
+      const idx = skillCount++;
+      const html = `<div class="item-block" id="skills-${idx}">
+        <label>Skill Name <input name="skill_name_${idx}" value="${skill.skill_name||''}"></label>
+        <label>Bullet Points ${createListInput('skill_bullets_'+idx, '')}</label>
+        <button type="button" class="remove-btn" onclick="removeItem('skills',${idx})">Remove</button>
+      </div>`;
+      document.getElementById('skills-section').insertAdjacentHTML('beforeend', html);
+    }
+    function addExperience(exp={}) {
+      const idx = expCount++;
+      const html = `<div class="item-block" id="experience-${idx}">
+        <label>Experience Name <input name="exp_name_${idx}" value="${exp.experience_name||''}"></label>
+        <label>Years <input name="exp_years_${idx}" value="${exp.years||''}"></label>
+        <label>Bullet Points ${createListInput('exp_bullets_'+idx, '')}</label>
+        <button type="button" class="remove-btn" onclick="removeItem('experience',${idx})">Remove</button>
+      </div>`;
+      document.getElementById('experience-section').insertAdjacentHTML('beforeend', html);
+    }
+    function addProject(proj={}) {
+      const idx = projCount++;
+      const html = `<div class="item-block" id="projects-${idx}">
+        <label>Project Name <input name="proj_name_${idx}" value="${proj.project_name||''}"></label>
+        <label>GitHub Link <input name="proj_github_${idx}" value="${proj.github_link||''}"></label>
+        <label>Bullet Points ${createListInput('proj_bullets_'+idx, '')}</label>
+        <button type="button" class="remove-btn" onclick="removeItem('projects',${idx})">Remove</button>
+      </div>`;
+      document.getElementById('projects-section').insertAdjacentHTML('beforeend', html);
+    }
+    function addEducation(edu={}) {
+      const idx = eduCount++;
+      const html = `<div class="item-block" id="education-${idx}">
+        <label>Education Name <input name="edu_name_${idx}" value="${edu.education_name||''}"></label>
+        <label>Institution <input name="edu_institution_${idx}" value="${edu.institution||''}"></label>
+        <label>Start <input name="edu_start_${idx}" value="${edu.start||''}"></label>
+        <label>End <input name="edu_end_${idx}" value="${edu.end||''}"></label>
+        <label>Grade <input name="edu_grade_${idx}" value="${edu.grade||''}"></label>
+        <button type="button" class="remove-btn" onclick="removeItem('education',${idx})">Remove</button>
+      </div>`;
+      document.getElementById('education-section').insertAdjacentHTML('beforeend', html);
+    }
+    function addReference(ref={}) {
+      const idx = refCount++;
+      const html = `<div class="item-block" id="references-${idx}">
+        <label>Referer Name <input name="ref_name_${idx}" value="${ref.referer_name||''}"></label>
+        <label>Referer Institute <input name="ref_institute_${idx}" value="${ref.referer_institute||''}"></label>
+        <label>Position <input name="ref_position_${idx}" value="${ref.position||''}"></label>
+        <label>Connection Type <input name="ref_connection_${idx}" value="${ref.connection_type||''}"></label>
+        <label>Institution URL <input name="ref_url_${idx}" value="${ref.institution_url||''}"></label>
+        <button type="button" class="remove-btn" onclick="removeItem('references',${idx})">Remove</button>
+      </div>`;
+      document.getElementById('references-section').insertAdjacentHTML('beforeend', html);
+    }
+    // --- Data Extraction ---
+    function getFormData() {
+      const form = document.getElementById('resume-form');
+      // Contact
+      const contact = {
+        email: form.contact_email.value || null,
+        linkedin: form.contact_linkedin.value || null,
+        github: form.contact_github.value || null,
+        phone: form.contact_phone.value || null
+      };
+      // Skills
+      const skills = [];
+      for(let i=0; i<skillCount; ++i) {
+        const el = document.getElementById('skills-'+i);
+        if(!el) continue;
+        const skill_name = form['skill_name_'+i].value;
+        const bullet_points = form['skill_bullets_'+i].value.split('\n').filter(Boolean);
+        if(skill_name) skills.push({skill_name, bullet_points});
+      }
+      // Experience
+      const experience = [];
+      for(let i=0; i<expCount; ++i) {
+        const el = document.getElementById('experience-'+i);
+        if(!el) continue;
+        const experience_name = form['exp_name_'+i].value;
+        const years = form['exp_years_'+i].value || null;
+        const bullet_points = form['exp_bullets_'+i].value.split('\n').filter(Boolean);
+        if(experience_name) experience.push({experience_name, years, bullet_points});
+      }
+      // Projects
+      const projects = [];
+      for(let i=0; i<projCount; ++i) {
+        const el = document.getElementById('projects-'+i);
+        if(!el) continue;
+        const project_name = form['proj_name_'+i].value;
+        const github_link = form['proj_github_'+i].value || null;
+        const bullet_points = form['proj_bullets_'+i].value.split('\n').filter(Boolean);
+        if(project_name) projects.push({project_name, github_link, bullet_points});
+      }
+      // Education
+      const education = [];
+      for(let i=0; i<eduCount; ++i) {
+        const el = document.getElementById('education-'+i);
+        if(!el) continue;
+        const education_name = form['edu_name_'+i].value;
+        const institution = form['edu_institution_'+i].value;
+        const start = form['edu_start_'+i].value || null;
+        const end = form['edu_end_'+i].value || null;
+        const grade = form['edu_grade_'+i].value || null;
+        if(education_name && institution) education.push({education_name, institution, start, end, grade});
+      }
+      // References
+      const references = [];
+      for(let i=0; i<refCount; ++i) {
+        const el = document.getElementById('references-'+i);
+        if(!el) continue;
+        const referer_name = form['ref_name_'+i].value;
+        const referer_institute = form['ref_institute_'+i].value;
+        const position = form['ref_position_'+i].value || null;
+        const connection_type = form['ref_connection_'+i].value || null;
+        const institution_url = form['ref_url_'+i].value || null;
+        if(referer_name && referer_institute) references.push({referer_name, referer_institute, position, connection_type, institution_url});
+      }
+      return {
+        name: form.name.value,
+        contact,
+        skills,
+        experience,
+        projects,
+        education,
+        references
+      };
+    }
+    async function generatePDF() {
+      const data = getFormData();
+      const res = await fetch('/generate-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) { alert('Failed to generate PDF'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      document.getElementById('preview').innerHTML = `<iframe src="${url}"></iframe><br><a href="${url}" download="resume.pdf">Download PDF</a>`;
+    }
+    async function downloadJSON() {
+      const data = getFormData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'resume.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    window.onload = function() {
+      addSkill();
+      addExperience();
+      addProject();
+      addEducation();
+      addReference();
+    }
+  </script>
+</body>
+</html>
