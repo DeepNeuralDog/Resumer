@@ -28,168 +28,201 @@
     <h1>Resume Maker</h1>
     <form id="resume-form">
       <label>Name <input name="name" required></label>
+      <label>Summary <textarea name="summary"></textarea></label>
+      <!-- Changed from text input to file input for image upload -->
+      <label>Passport Size Image <input type="file" id="image_upload" name="image_upload" accept="image/*"></label>
       <fieldset>
         <legend>Contact</legend>
-        <label>Email <input name="contact_email"></label>
-        <label>LinkedIn <input name="contact_linkedin"></label>
-        <label>GitHub <input name="contact_github"></label>
-        <label>Phone <input name="contact_phone"></label>
+        <label>Email <input name="email" type="email"></label>
+        <label>Phone <input name="phone" type="tel"></label>
+        <label>LinkedIn Profile URL <input name="linkedin"></label>
+        <label>GitHub Profile URL <input name="github"></label>
+        <label>Personal Website/Portfolio URL <input name="website"></label>
       </fieldset>
       <div class="section-list" id="skills-section">
-        <h3>Skills</h3>
       </div>
       <button type="button" class="add-btn" onclick="addSkill()">Add Skill</button>
       <div class="section-list" id="experience-section">
-        <h3>Experience</h3>
       </div>
       <button type="button" class="add-btn" onclick="addExperience()">Add Experience</button>
       <div class="section-list" id="projects-section">
-        <h3>Projects</h3>
       </div>
       <button type="button" class="add-btn" onclick="addProject()">Add Project</button>
       <div class="section-list" id="education-section">
-        <h3>Education</h3>
       </div>
       <button type="button" class="add-btn" onclick="addEducation()">Add Education</button>
       <div class="section-list" id="references-section">
-        <h3>References</h3>
       </div>
       <button type="button" class="add-btn" onclick="addReference()">Add Reference</button>
       <div class="actions">
-        <button type="button" onclick="generatePDF()">Preview/Download PDF</button>
+        <button type="button" onclick="generatePDF()">Generate PDF</button>
         <button type="button" onclick="downloadJSON()">Download JSON</button>
+        <input type="file" id="import-json" accept=".json" style="display: none;" onchange="importJSON(event)">
+        <button type="button" onclick="document.getElementById('import-json').click()">Import JSON</button>
       </div>
     </form>
     <div class="preview" id="preview"></div>
   </div>
   <script>
     // --- Dynamic Section Logic ---
-    function createListInput(name, placeholder) {
-      return `<textarea name="${name}" placeholder="One per line"></textarea>`;
+    function createListInput(name, placeholder, value = "") {
+      return `<textarea name="${name}" placeholder="${placeholder}">${value}</textarea>`;
     }
     function removeItem(section, idx) {
       document.getElementById(section+'-'+idx).remove();
     }
     let skillCount = 0, expCount = 0, projCount = 0, eduCount = 0, refCount = 0;
-    function addSkill(skill={}) {
+
+    function addSkill(skill = {}) {
       const idx = skillCount++;
       const html = `<div class="item-block" id="skills-${idx}">
-        <label>Skill Name <input name="skill_name_${idx}" value="${skill.skill_name||''}"></label>
-        <label>Bullet Points ${createListInput('skill_bullets_'+idx, '')}</label>
-        <button type="button" class="remove-btn" onclick="removeItem('skills',${idx})">Remove</button>
+        <button type="button" class="remove-btn" onclick="removeItem('skills', ${idx})">Remove</button>
+        <label>Skill Name <input name="skill_name" value="${skill.skill_name || ''}" required></label>
+        <label>Bullet Points (one per line)
+          ${createListInput('bullet_points', 'Detail 1\nDetail 2', (skill.bullet_points || []).join('\n'))}
+        </label>
       </div>`;
       document.getElementById('skills-section').insertAdjacentHTML('beforeend', html);
     }
-    function addExperience(exp={}) {
+
+    function addExperience(exp = {}) {
       const idx = expCount++;
       const html = `<div class="item-block" id="experience-${idx}">
-        <label>Experience Name <input name="exp_name_${idx}" value="${exp.experience_name||''}"></label>
-        <label>Years <input name="exp_years_${idx}" value="${exp.years||''}"></label>
-        <label>Bullet Points ${createListInput('exp_bullets_'+idx, '')}</label>
-        <button type="button" class="remove-btn" onclick="removeItem('experience',${idx})">Remove</button>
+        <button type="button" class="remove-btn" onclick="removeItem('experience', ${idx})">Remove</button>
+        <label>Company/Role <input name="experience_name" value="${exp.experience_name || ''}" required></label>
+        <label>Years (e.g., 2020-Present or Jan 2020 - Dec 2021) <input name="years" value="${exp.years || ''}"></label>
+        <label>Bullet Points (one per line)
+          ${createListInput('bullet_points', 'Accomplishment 1\nAccomplishment 2', (exp.bullet_points || []).join('\n'))}
+        </label>
       </div>`;
       document.getElementById('experience-section').insertAdjacentHTML('beforeend', html);
     }
-    function addProject(proj={}) {
+
+    function addProject(proj = {}) {
       const idx = projCount++;
       const html = `<div class="item-block" id="projects-${idx}">
-        <label>Project Name <input name="proj_name_${idx}" value="${proj.project_name||''}"></label>
-        <label>GitHub Link <input name="proj_github_${idx}" value="${proj.github_link||''}"></label>
-        <label>Bullet Points ${createListInput('proj_bullets_'+idx, '')}</label>
-        <button type="button" class="remove-btn" onclick="removeItem('projects',${idx})">Remove</button>
+        <button type="button" class="remove-btn" onclick="removeItem('projects', ${idx})">Remove</button>
+        <label>Project Name <input name="project_name" value="${proj.project_name || ''}" required></label>
+        <label>GitHub Link (optional) <input name="github_link" value="${proj.github_link || ''}"></label>
+        <label>Bullet Points (one per line)
+          ${createListInput('bullet_points', 'Feature 1\nFeature 2', (proj.bullet_points || []).join('\n'))}
+        </label>
       </div>`;
       document.getElementById('projects-section').insertAdjacentHTML('beforeend', html);
     }
-    function addEducation(edu={}) {
+
+    function addEducation(edu = {}) {
       const idx = eduCount++;
       const html = `<div class="item-block" id="education-${idx}">
-        <label>Education Name <input name="edu_name_${idx}" value="${edu.education_name||''}"></label>
-        <label>Institution <input name="edu_institution_${idx}" value="${edu.institution||''}"></label>
-        <label>Start <input name="edu_start_${idx}" value="${edu.start||''}"></label>
-        <label>End <input name="edu_end_${idx}" value="${edu.end||''}"></label>
-        <label>Grade <input name="edu_grade_${idx}" value="${edu.grade||''}"></label>
-        <button type="button" class="remove-btn" onclick="removeItem('education',${idx})">Remove</button>
+        <button type="button" class="remove-btn" onclick="removeItem('education', ${idx})">Remove</button>
+        <label>Degree/Certificate <input name="education_name" value="${edu.education_name || ''}" required></label>
+        <label>Institution <input name="institution" value="${edu.institution || ''}" required></label>
+        <label>Start Year (optional) <input name="start" value="${edu.start || ''}"></label>
+        <label>End Year (optional) <input name="end" value="${edu.end || ''}"></label>
+        <label>Grade/GPA (optional) <input name="grade" value="${edu.grade || ''}"></label>
       </div>`;
       document.getElementById('education-section').insertAdjacentHTML('beforeend', html);
     }
-    function addReference(ref={}) {
+
+    function addReference(ref = {}) {
       const idx = refCount++;
       const html = `<div class="item-block" id="references-${idx}">
-        <label>Referer Name <input name="ref_name_${idx}" value="${ref.referer_name||''}"></label>
-        <label>Referer Institute <input name="ref_institute_${idx}" value="${ref.referer_institute||''}"></label>
-        <label>Position <input name="ref_position_${idx}" value="${ref.position||''}"></label>
-        <label>Connection Type <input name="ref_connection_${idx}" value="${ref.connection_type||''}"></label>
-        <label>Institution URL <input name="ref_url_${idx}" value="${ref.institution_url||''}"></label>
-        <button type="button" class="remove-btn" onclick="removeItem('references',${idx})">Remove</button>
+        <button type="button" class="remove-btn" onclick="removeItem('references', ${idx})">Remove</button>
+        <label>Referer Name <input name="referer_name" value="${ref.referer_name || ''}" required></label>
+        <label>Referer Institute/Company <input name="referer_institute" value="${ref.referer_institute || ''}" required></label>
+        <label>Position (optional) <input name="position" value="${ref.position || ''}"></label>
+        <label>Connection Type (e.g., Supervisor, Colleague) (optional) <input name="connection_type" value="${ref.connection_type || ''}"></label>
+        <label>Institution/Company URL (optional) <input name="institution_url" value="${ref.institution_url || ''}"></label>
       </div>`;
       document.getElementById('references-section').insertAdjacentHTML('beforeend', html);
     }
+
     // --- Data Extraction ---
-    function getFormData() {
+    async function getFormData() { // Made async to handle file reading
       const form = document.getElementById('resume-form');
-      // Contact
       const contact = {
-        email: form.contact_email.value || null,
-        linkedin: form.contact_linkedin.value || null,
-        github: form.contact_github.value || null,
-        phone: form.contact_phone.value || null
+        email: form.email.value,
+        phone: form.phone.value,
+        linkedin: form.linkedin.value,
+        github: form.github.value,
+        website: form.website.value,
       };
-      // Skills
+      const summary = form.summary.value;
+      
+      let image_base64 = null;
+      const imageFile = form.image_upload.files[0];
+      if (imageFile) {
+        image_base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = error => reject(error);
+          reader.readAsDataURL(imageFile);
+        });
+      }
+
       const skills = [];
       for(let i=0; i<skillCount; ++i) {
-        const el = document.getElementById('skills-'+i);
-        if(!el) continue;
-        const skill_name = form['skill_name_'+i].value;
-        const bullet_points = form['skill_bullets_'+i].value.split('\n').filter(Boolean);
-        if(skill_name) skills.push({skill_name, bullet_points});
+        const block = document.getElementById('skills-'+i);
+        if (!block) continue;
+        skills.push({
+          skill_name: block.querySelector('[name="skill_name"]').value,
+          bullet_points: block.querySelector('[name="bullet_points"]').value.split('\n').map(s => s.trim()).filter(s => s)
+        });
       }
-      // Experience
+
       const experience = [];
       for(let i=0; i<expCount; ++i) {
-        const el = document.getElementById('experience-'+i);
-        if(!el) continue;
-        const experience_name = form['exp_name_'+i].value;
-        const years = form['exp_years_'+i].value || null;
-        const bullet_points = form['exp_bullets_'+i].value.split('\n').filter(Boolean);
-        if(experience_name) experience.push({experience_name, years, bullet_points});
+        const block = document.getElementById('experience-'+i);
+        if (!block) continue;
+        experience.push({
+          experience_name: block.querySelector('[name="experience_name"]').value,
+          years: block.querySelector('[name="years"]').value,
+          bullet_points: block.querySelector('[name="bullet_points"]').value.split('\n').map(s => s.trim()).filter(s => s)
+        });
       }
-      // Projects
+
       const projects = [];
       for(let i=0; i<projCount; ++i) {
-        const el = document.getElementById('projects-'+i);
-        if(!el) continue;
-        const project_name = form['proj_name_'+i].value;
-        const github_link = form['proj_github_'+i].value || null;
-        const bullet_points = form['proj_bullets_'+i].value.split('\n').filter(Boolean);
-        if(project_name) projects.push({project_name, github_link, bullet_points});
+        const block = document.getElementById('projects-'+i);
+        if (!block) continue;
+        projects.push({
+          project_name: block.querySelector('[name="project_name"]').value,
+          github_link: block.querySelector('[name="github_link"]').value,
+          bullet_points: block.querySelector('[name="bullet_points"]').value.split('\n').map(s => s.trim()).filter(s => s)
+        });
       }
-      // Education
+
       const education = [];
       for(let i=0; i<eduCount; ++i) {
-        const el = document.getElementById('education-'+i);
-        if(!el) continue;
-        const education_name = form['edu_name_'+i].value;
-        const institution = form['edu_institution_'+i].value;
-        const start = form['edu_start_'+i].value || null;
-        const end = form['edu_end_'+i].value || null;
-        const grade = form['edu_grade_'+i].value || null;
-        if(education_name && institution) education.push({education_name, institution, start, end, grade});
+        const block = document.getElementById('education-'+i);
+        if (!block) continue;
+        education.push({
+          education_name: block.querySelector('[name="education_name"]').value,
+          institution: block.querySelector('[name="institution"]').value,
+          start: block.querySelector('[name="start"]').value,
+          end: block.querySelector('[name="end"]').value,
+          grade: block.querySelector('[name="grade"]').value,
+        });
       }
-      // References
+
       const references = [];
       for(let i=0; i<refCount; ++i) {
-        const el = document.getElementById('references-'+i);
-        if(!el) continue;
-        const referer_name = form['ref_name_'+i].value;
-        const referer_institute = form['ref_institute_'+i].value;
-        const position = form['ref_position_'+i].value || null;
-        const connection_type = form['ref_connection_'+i].value || null;
-        const institution_url = form['ref_url_'+i].value || null;
-        if(referer_name && referer_institute) references.push({referer_name, referer_institute, position, connection_type, institution_url});
+        const block = document.getElementById('references-'+i);
+        if (!block) continue;
+        references.push({
+          referer_name: block.querySelector('[name="referer_name"]').value,
+          referer_institute: block.querySelector('[name="referer_institute"]').value,
+          position: block.querySelector('[name="position"]').value,
+          connection_type: block.querySelector('[name="connection_type"]').value,
+          institution_url: block.querySelector('[name="institution_url"]').value,
+        });
       }
+
       return {
         name: form.name.value,
         contact,
+        summary,
+        image_base64, // Changed from image_path
         skills,
         experience,
         projects,
@@ -197,34 +230,114 @@
         references
       };
     }
+
     async function generatePDF() {
-      const data = getFormData();
+      const data = await getFormData(); // Await because getFormData is now async
       const res = await fetch('/generate-pdf', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify(data)
       });
-      if (!res.ok) { alert('Failed to generate PDF'); return; }
+      if (!res.ok) { alert('Failed to generate PDF. Check console for details.'); console.error(await res.text()); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       document.getElementById('preview').innerHTML = `<iframe src="${url}"></iframe><br><a href="${url}" download="resume.pdf">Download PDF</a>`;
     }
+
     async function downloadJSON() {
-      const data = getFormData();
+      const data = await getFormData(); // Await because getFormData is now async
       const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = 'resume.json';
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
+
+    function populateForm(data) {
+      const form = document.getElementById('resume-form');
+      form.name.value = data.name || '';
+      form.summary.value = data.summary || '';
+      // Image is not directly populated back to file input for security/browser reasons
+      // User will need to re-select if they import JSON with an image.
+      // We could display the existing image if data.image_base64 exists, but not repopulate the file input itself.
+      document.getElementById('image_upload').value = null; // Clear file input
+
+      if (data.contact) {
+        form.email.value = data.contact.email || '';
+        form.phone.value = data.contact.phone || '';
+        form.linkedin.value = data.contact.linkedin || '';
+        form.github.value = data.contact.github || '';
+        form.website.value = data.contact.website || '';
+      }
+
+      // Clear existing dynamic sections before populating
+      document.getElementById('skills-section').innerHTML = '';
+      skillCount = 0;
+      (data.skills || []).forEach(addSkill);
+
+      document.getElementById('experience-section').innerHTML = '';
+      expCount = 0;
+      (data.experience || []).forEach(addExperience);
+
+      document.getElementById('projects-section').innerHTML = '';
+      projCount = 0;
+      (data.projects || []).forEach(addProject);
+
+      document.getElementById('education-section').innerHTML = '';
+      eduCount = 0;
+      (data.education || []).forEach(addEducation);
+
+      document.getElementById('references-section').innerHTML = '';
+      refCount = 0;
+      (data.references || []).forEach(addReference);
+    }
+
+    function importJSON(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          try {
+            const jsonData = JSON.parse(e.target.result);
+            populateForm(jsonData);
+            alert('Resume data imported successfully!');
+          } catch (error) {
+            alert('Error importing JSON: ' + error.message);
+          }
+        };
+        reader.readAsText(file);
+        event.target.value = null; // Reset file input
+      }
+    }
+
     window.onload = function() {
-      addSkill();
-      addExperience();
-      addProject();
-      addEducation();
-      addReference();
+      // Example data for initial load (optional)
+      addSkill({ skill_name: 'Typst', bullet_points: ['Template Design', 'Scripting'] });
+      addSkill({ skill_name: 'Python', bullet_points: ['FastAPI', 'Data Processing'] });
+      addExperience({ experience_name: 'Software Engineer at Tech Corp', years: '2020-Present', bullet_points: ['Developed web apps', 'Led a team of 5 developers', 'Improved performance by 20%'] });
+      addProject({ project_name: 'Resume Maker', github_link: 'github.com/yourusername/resumer', bullet_points: ['Built with FastAPI & Typst', 'Dynamic PDF generation from web form', 'JSON import/export'] });
+      addEducation({ education_name: 'MSc Computer Science', institution: 'University of Example', start: '2018', end: '2020', grade: 'Distinction' });
+      addReference({ referer_name: 'Dr. Jane Doe', referer_institute: 'University of Example', position: 'Professor', connection_type: 'Academic Advisor', institution_url: 'example.edu' });
+
+      const form = document.getElementById('resume-form');
+      form.name.value = 'Your Name';
+      form.summary.value = 'A brief professional summary highlighting key skills and experiences. Lorem ipsum dolor sit amet, consectetur adipiscing elit.';
+      // form.image_path.value = ''; // e.g., 'https://via.placeholder.com/150' or local path if server can serve it
+      // Clear the file input on load
+      const imageUploadInput = document.getElementById('image_upload');
+      if(imageUploadInput) imageUploadInput.value = null;
+
+      if (form.email) form.email.value = 'your.email@example.com';
+      if (form.phone) form.phone.value = '123-456-7890';
+      if (form.linkedin) form.linkedin.value = 'linkedin.com/in/yourprofile';
+      if (form.github) form.github.value = 'github.com/yourusername';
+      if (form.website) form.website.value = 'your-portfolio.com';
     }
   </script>
 </body>
