@@ -1,6 +1,6 @@
 // --- Jinja2 Data Placeholders ---
 #let name = "{{ name }}"
-#let contact_data = {{ contact }} // Renamed to avoid conflict if 'contact' is a Typst keyword/function
+#let contact_data = {{ contact }}
 #let summary_text = {{ summary }}
 #let image_path_val = {{ image_path }}
 #let skills_list = {{ skills }}

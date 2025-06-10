@@ -29,7 +29,6 @@
     <form id="resume-form">
       <label>Name <input name="name" required></label>
       <label>Summary <textarea name="summary"></textarea></label>
-      <!-- Changed from text input to file input for image upload -->
       <label>Passport Size Image <input type="file" id="image_upload" name="image_upload" accept="image/*"></label>
       <fieldset>
         <legend>Contact</legend>
@@ -137,8 +136,7 @@
       document.getElementById('references-section').insertAdjacentHTML('beforeend', html);
     }
 
-    // --- Data Extraction ---
-    async function getFormData() { // Made async to handle file reading
+    async function getFormData() {
       const form = document.getElementById('resume-form');
       const contact = {
         email: form.email.value,
@@ -222,7 +220,7 @@
         name: form.name.value,
         contact,
         summary,
-        image_base64, // Changed from image_path
+        image_base64,
         skills,
         experience,
         projects,
@@ -232,7 +230,7 @@
     }
 
     async function generatePDF() {
-      const data = await getFormData(); // Await because getFormData is now async
+      const data = await getFormData();
       const res = await fetch('/generate-pdf', {
         method: 'POST',
         headers: {
@@ -247,7 +245,7 @@
     }
 
     async function downloadJSON() {
-      const data = await getFormData(); // Await because getFormData is now async
+      const data = await getFormData();
       const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -263,10 +261,7 @@
       const form = document.getElementById('resume-form');
       form.name.value = data.name || '';
       form.summary.value = data.summary || '';
-      // Image is not directly populated back to file input for security/browser reasons
-      // User will need to re-select if they import JSON with an image.
-      // We could display the existing image if data.image_base64 exists, but not repopulate the file input itself.
-      document.getElementById('image_upload').value = null; // Clear file input
+      document.getElementById('image_upload').value = null;
 
       if (data.contact) {
         form.email.value = data.contact.email || '';
@@ -276,7 +271,6 @@
         form.website.value = data.contact.website || '';
       }
 
-      // Clear existing dynamic sections before populating
       document.getElementById('skills-section').innerHTML = '';
       skillCount = 0;
       (data.skills || []).forEach(addSkill);
@@ -312,12 +306,11 @@
           }
         };
         reader.readAsText(file);
-        event.target.value = null; // Reset file input
+        event.target.value = null;
       }
     }
 
     window.onload = function() {
-      // Example data for initial load (optional)
       addSkill({ skill_name: 'Typst', bullet_points: ['Template Design', 'Scripting'] });
       addSkill({ skill_name: 'Python', bullet_points: ['FastAPI', 'Data Processing'] });
       addExperience({ experience_name: 'Software Engineer at Tech Corp', years: '2020-Present', bullet_points: ['Developed web apps', 'Led a team of 5 developers', 'Improved performance by 20%'] });
@@ -328,11 +321,8 @@
       const form = document.getElementById('resume-form');
       form.name.value = 'Your Name';
       form.summary.value = 'A brief professional summary highlighting key skills and experiences. Lorem ipsum dolor sit amet, consectetur adipiscing elit.';
-      // form.image_path.value = ''; // e.g., 'https://via.placeholder.com/150' or local path if server can serve it
-      // Clear the file input on load
       const imageUploadInput = document.getElementById('image_upload');
       if(imageUploadInput) imageUploadInput.value = null;
-
       if (form.email) form.email.value = 'your.email@example.com';
       if (form.phone) form.phone.value = '123-456-7890';
       if (form.linkedin) form.linkedin.value = 'linkedin.com/in/yourprofile';

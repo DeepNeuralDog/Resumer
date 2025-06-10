@@ -1,15 +1,15 @@
-from typing import List, Optional
-from fastapi import FastAPI, UploadFile, Form, Request
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from fastapi import FastAPI, UploadFile, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import uvicorn
-import subprocess
 from tempfile import NamedTemporaryFile
+from typing import List, Optional
+from pydantic import BaseModel
+from PIL import Image
+import subprocess
+import uvicorn
 import jinja2
 import base64
 import os
-from PIL import Image
 import io
 
 app = FastAPI()
@@ -29,7 +29,7 @@ class Contact(BaseModel):
     linkedin: Optional[str] = None
     github: Optional[str] = None
     phone: Optional[str] = None
-    website: Optional[str] = None # Added for personal website/portfolio
+    website: Optional[str] = None
 
 class Skill(BaseModel):
     skill_name: str
@@ -62,8 +62,8 @@ class Reference(BaseModel):
 class ResumeData(BaseModel):
     name: str
     contact: Contact
-    summary: Optional[str] = None # Added summary
-    image_base64: Optional[str] = None # Changed from image_path to image_base64
+    summary: Optional[str] = None
+    image_base64: Optional[str] = None
     skills: List[Skill]
     experience: List[Experience]
     projects: List[Project]
@@ -112,7 +112,6 @@ async def generate_pdf(data: ResumeData, request: Request):
             typst_template = f.read()
         template = env.from_string(typst_template)
 
-        # Create the temporary .typ file first (outside of image processing)
         with NamedTemporaryFile("w", suffix=".typ", delete=False) as typ_file:
             typ_file_path = typ_file.name
 
@@ -121,46 +120,36 @@ async def generate_pdf(data: ResumeData, request: Request):
         
         if data.image_base64:
             try:
-                # Handle data URL format (data:image/png;base64,...)
                 if ',' in data.image_base64:
-                    # Split on the first comma to separate header from data
                     header, image_data_b64 = data.image_base64.split(',', 1)
                 else:
-                    # Assume it's just the base64 data without header
                     image_data_b64 = data.image_base64
                 
                 image_data = base64.b64decode(image_data_b64)
                 
-                # Use PIL to open and convert the image to PNG
                 image = Image.open(io.BytesIO(image_data))
                 
-                # Convert to RGB if necessary (for JPEG compatibility)
                 if image.mode in ('RGBA', 'LA', 'P'):
-                    # Keep transparency for PNG
                     image = image.convert('RGBA')
                 elif image.mode != 'RGB':
                     image = image.convert('RGB')
                 
-                # Create image file in the same directory as the .typ file
                 typ_dir = os.path.dirname(typ_file_path)
                 image_filename = "resume_image.png"
                 image_full_path = os.path.join(typ_dir, image_filename)
                 
-                # Save as PNG
                 image.save(image_full_path, 'PNG', optimize=True)
                 
-                # Use just the filename since it's in the same directory
                 image_typst_path = image_filename
                 
             except Exception as e:
                 print(f"Error processing image: {e}")
-                # Continue without image if there's an error
 
         typst_filled = template.render(
             name=data.name,
             contact=py_to_typst(data.contact.dict()),
             summary=py_to_typst(data.summary),
-            image_path=py_to_typst(image_typst_path), # Pass the relative filename or None
+            image_path=py_to_typst(image_typst_path),
             skills=py_to_typst([s.dict() for s in data.skills]),
             experience=py_to_typst([e.dict() for e in data.experience]),
             projects=py_to_typst([p.dict() for p in data.projects]),
@@ -171,7 +160,6 @@ async def generate_pdf(data: ResumeData, request: Request):
         print(typst_filled)
         print("-----------------------------")
         
-        # Write the content to the .typ file
         with open(typ_file_path, "w") as typ_file:
             typ_file.write(typst_filled)
             
@@ -180,12 +168,10 @@ async def generate_pdf(data: ResumeData, request: Request):
             subprocess.run(["typst", "compile", typ_file_path, pdf_path], check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
             print("TYPST ERROR OUTPUT:", e.stderr)
-            # Clean up temp files
             if image_full_path and os.path.exists(image_full_path):
                 os.unlink(image_full_path)
             return JSONResponse({"error": e.stderr}, status_code=500)
         
-        # Clean up temp image file after successful compilation
         if image_full_path and os.path.exists(image_full_path):
             os.unlink(image_full_path)
 
