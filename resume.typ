@@ -15,7 +15,7 @@
   paper: "a4",
   margin: (left: 1cm, right: 1cm, top: 1cm, bottom: 1cm)
 )
-#set text(font: "New Computer Modern", lang: "en", size: 10pt)
+#set text(font: "New Computer Modern", lang: "en", size: 10.75pt)
 
 // --- Iconography (Placeholder for now, assuming you'll provide SVGs or similar) ---
 #let icon_email = "✉" // Placeholder
@@ -24,7 +24,9 @@
 #let icon_github = "🐙"  // Placeholder - Consider using a proper GitHub icon
 #let icon_website = "🌐" // Placeholder
 #let element_title = "▶︎▶︎"
-
+#let grade = "Grade:"
+#let string_space = "   "
+#let at = "at"
 
 // --- Helper Functions & Styles ---
 
@@ -156,7 +158,7 @@
 #if projects_list.len() > 0 {
   section_title("Projects")
   for proj_item in projects_list {
-    text(weight: "semibold")[#element_title #proj_item.project_name]
+    text(weight: "semibold", size:12pt)[#element_title #proj_item.project_name]
     if proj_item.github_link != none {
       text(size: 9pt)[ (#link("https://" + proj_item.github_link.replace("https://", ""))[#proj_item.github_link])]
     }
@@ -172,21 +174,19 @@
 #if education_list.len() > 0 {
   section_title("Education")
   for edu_item in education_list {
-    text(weight: "semibold")[#element_title #edu_item.education_name, #edu_item.institution]
+    text(weight: "semibold", size:12pt)[#element_title #edu_item.education_name]
+    v(0.0em)
+    text(weight: 550)[#string_space #edu_item.institution]
     let details_content = [] // Initialize as empty content
     if edu_item.start != none {
       details_content = details_content + edu_item.start + " - " + (if edu_item.end != none { edu_item.end } else { "Present" })
-    }
-    if edu_item.grade != none {
-      if details_content != [] { // If there's already start/end date info, add a comma separator
-        details_content = details_content + ", "
-      }
-      details_content = details_content + "Grade: " + edu_item.grade
     }
     if details_content != [] { // Check if any content was actually added
       text(size: 9pt)[ (#details_content)]
     }
     v(0.0em) // Space after each education entry
+    text()[#string_space #grade #edu_item.grade]
+    v(0.0em)
   }
 }
 
@@ -194,27 +194,11 @@
 #if references_list.len() > 0 {
   section_title("References")
   for ref_item in references_list {
-    text(weight: "semibold")[#ref_item.referer_name, #ref_item.referer_institute]
-    let details_content = [] // Initialize as empty content
-    if ref_item.position != none {
-      details_content = details_content + ref_item.position
-    }
-    if ref_item.connection_type != none {
-      if details_content != [] { // If there's already position info, add a comma separator
-        details_content = details_content + ", "
-      }
-      details_content = details_content + ref_item.connection_type
-    }
-    if ref_item.institution_url != none {
-      if details_content != [] { // If there's already other info, add a space separator
-        details_content = details_content + " "
-      }
-      details_content = details_content + text(size: 9pt)[(#link("https://" + ref_item.institution_url.replace("https://", ""))[#ref_item.institution_url])]
-    }
-
-    if details_content != [] { // Check if any content was actually added
-      text(size: 9pt)[ (#details_content)]
-    }
-    v(0.0em) // Space after each reference entry
+    text(weight: "semibold")[#ref_item.referer_name]
+    v(0.0em)
+    text(weight: 550)[#ref_item.position at #ref_item.referer_institute]
+    text()[(#ref_item.institution_url)]
+    v(0.0em)
+    text(weight: 550)[Connection: #ref_item.connection_type]
   }
 }
