@@ -26,9 +26,10 @@ TEMPLATE_PATH = "resume.typ"
 
 class Contact(BaseModel):
     email: Optional[str] = None
+    phone: Optional[str] = None
+    location: Optional[str] = None
     linkedin: Optional[str] = None
     github: Optional[str] = None
-    phone: Optional[str] = None
     website: Optional[str] = None
 
 class Skill(BaseModel):
@@ -96,6 +97,91 @@ def py_to_typst(val):
         return 'none'
 
 
+# @app.post("/generate-pdf")
+# async def generate_pdf(data: ResumeData, request: Request):
+#     try:
+#         env = jinja2.Environment(
+#             variable_start_string='{{',
+#             variable_end_string='}}',
+#             block_start_string='{%',
+#             block_end_string='%}',
+#             comment_start_string='{#JINJA#',
+#             comment_end_string='#JINJA#}'
+#         )
+#         env.filters['typst'] = py_to_typst
+#         with open(TEMPLATE_PATH) as f:
+#             typst_template = f.read()
+#         template = env.from_string(typst_template)
+
+#         with NamedTemporaryFile("w", suffix=".typ", delete=False) as typ_file:
+#             typ_file_path = typ_file.name
+
+#         image_typst_path = None
+#         image_full_path = None
+        
+#         if data.image_base64:
+#             try:
+#                 if ',' in data.image_base64:
+#                     header, image_data_b64 = data.image_base64.split(',', 1)
+#                 else:
+#                     image_data_b64 = data.image_base64
+                
+#                 image_data = base64.b64decode(image_data_b64)
+                
+#                 image = Image.open(io.BytesIO(image_data))
+                
+#                 if image.mode in ('RGBA', 'LA', 'P'):
+#                     image = image.convert('RGBA')
+#                 elif image.mode != 'RGB':
+#                     image = image.convert('RGB')
+                
+#                 typ_dir = os.path.dirname(typ_file_path)
+#                 image_filename = "resume_image.png"
+#                 image_full_path = os.path.join(typ_dir, image_filename)
+                
+#                 image.save(image_full_path, 'PNG', optimize=True)
+                
+#                 image_typst_path = image_filename
+                
+#             except Exception as e:
+#                 print(f"Error processing image: {e}")
+
+#         typst_filled = template.render(
+#             name=data.name,
+#             contact=py_to_typst(data.contact.dict()),
+#             summary=py_to_typst(data.summary),
+#             image_path=py_to_typst(image_typst_path),
+#             skills=py_to_typst([s.dict() for s in data.skills]),
+#             experience=py_to_typst([e.dict() for e in data.experience]),
+#             projects=py_to_typst([p.dict() for p in data.projects]),
+#             education=py_to_typst([e.dict() for e in data.education]),
+#             references=py_to_typst([r.dict() for r in data.references])
+#         )
+#         print("---- FILLED TYPST TEMPLATE ----")
+#         print(typst_filled)
+#         print("-----------------------------")
+        
+#         with open(typ_file_path, "w") as typ_file:
+#             typ_file.write(typst_filled)
+            
+#         pdf_path = typ_file_path.replace(".typ", ".pdf")
+#         try:
+#             subprocess.run(["typst", "compile", typ_file_path, pdf_path], check=True, capture_output=True, text=True)
+#         except subprocess.CalledProcessError as e:
+#             print("TYPST ERROR OUTPUT:", e.stderr)
+#             if image_full_path and os.path.exists(image_full_path):
+#                 os.unlink(image_full_path)
+#             return JSONResponse({"error": e.stderr}, status_code=500)
+        
+#         if image_full_path and os.path.exists(image_full_path):
+#             os.unlink(image_full_path)
+
+#         return FileResponse(pdf_path, media_type="application/pdf", filename="resume.pdf")
+#     except Exception as e:
+#         import traceback
+#         print("SERVER ERROR:", traceback.format_exc())
+#         return JSONResponse({"error": str(e)}, status_code=500)
+
 @app.post("/generate-pdf")
 async def generate_pdf(data: ResumeData, request: Request):
     try:
@@ -114,6 +200,17 @@ async def generate_pdf(data: ResumeData, request: Request):
 
         with NamedTemporaryFile("w", suffix=".typ", delete=False) as typ_file:
             typ_file_path = typ_file.name
+
+        # Copy icon files to the same directory as the .typ file
+        import shutil
+        typ_dir = os.path.dirname(typ_file_path)
+        icon_files = ["email.png", "phone.png", "linkedin.png", "github.png", "location.png"]
+        
+        for icon_file in icon_files:
+            source_path = os.path.join("static", icon_file)
+            dest_path = os.path.join(typ_dir, icon_file)
+            if os.path.exists(source_path):
+                shutil.copy2(source_path, dest_path)
 
         image_typst_path = None
         image_full_path = None
@@ -134,7 +231,6 @@ async def generate_pdf(data: ResumeData, request: Request):
                 elif image.mode != 'RGB':
                     image = image.convert('RGB')
                 
-                typ_dir = os.path.dirname(typ_file_path)
                 image_filename = "resume_image.png"
                 image_full_path = os.path.join(typ_dir, image_filename)
                 
@@ -168,12 +264,25 @@ async def generate_pdf(data: ResumeData, request: Request):
             subprocess.run(["typst", "compile", typ_file_path, pdf_path], check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
             print("TYPST ERROR OUTPUT:", e.stderr)
+            # Clean up temp files on error
             if image_full_path and os.path.exists(image_full_path):
                 os.unlink(image_full_path)
+            # Clean up icon files
+            for icon_file in icon_files:
+                icon_path = os.path.join(typ_dir, icon_file)
+                if os.path.exists(icon_path):
+                    os.unlink(icon_path)
             return JSONResponse({"error": e.stderr}, status_code=500)
         
+        # Clean up temp files after successful compilation
         if image_full_path and os.path.exists(image_full_path):
             os.unlink(image_full_path)
+        
+        # Clean up icon files
+        for icon_file in icon_files:
+            icon_path = os.path.join(typ_dir, icon_file)
+            if os.path.exists(icon_path):
+                os.unlink(icon_path)
 
         return FileResponse(pdf_path, media_type="application/pdf", filename="resume.pdf")
     except Exception as e:

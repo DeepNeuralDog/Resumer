@@ -26,6 +26,11 @@
 <body>
   <div class="container">
     <h1>Resumer</h1>
+    <div style="text-align: center; margin-bottom: 20px; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px;">
+    <p style="margin: 0; color: white; font-size: 14px;">
+      ⭐ <a href="https://github.com/DeepNeuralDog/Resumer" target="_blank" style="color: #ffd700; text-decoration: none; font-weight: bold;">GitHub repo here</a> - Help make Resumer better! ⭐
+    </p>
+  </div>
     <form id="resume-form">
       <label>Name <input name="name" required></label>
       <label>Summary <textarea name="summary"></textarea></label>
@@ -34,6 +39,7 @@
         <legend>Contact</legend>
         <label>Email <input name="email" type="email"></label>
         <label>Phone <input name="phone" type="tel"></label>
+        <label>Location (City, Country) <input name="location"></label>
         <label>LinkedIn Profile URL <input name="linkedin"></label>
         <label>GitHub Profile URL <input name="github"></label>
         <label>Personal Website/Portfolio URL <input name="website"></label>
@@ -141,6 +147,7 @@
       const contact = {
         email: form.email.value,
         phone: form.phone.value,
+        location: form.location.value,
         linkedin: form.linkedin.value,
         github: form.github.value,
         website: form.website.value,
@@ -266,6 +273,7 @@
       if (data.contact) {
         form.email.value = data.contact.email || '';
         form.phone.value = data.contact.phone || '';
+        if (form.location) form.location.value = data.contact.location || '';
         form.linkedin.value = data.contact.linkedin || '';
         form.github.value = data.contact.github || '';
         form.website.value = data.contact.website || '';
@@ -325,6 +333,7 @@
       if(imageUploadInput) imageUploadInput.value = null;
       if (form.email) form.email.value = 'your.email@example.com';
       if (form.phone) form.phone.value = '123-456-7890';
+      if (form.location) form.location.value = 'Dhaka, Bangladesh';
       if (form.linkedin) form.linkedin.value = 'linkedin.com/in/yourprofile';
       if (form.github) form.github.value = 'github.com/yourusername';
       if (form.website) form.website.value = 'your-portfolio.com';

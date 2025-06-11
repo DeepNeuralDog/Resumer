@@ -17,12 +17,13 @@
 )
 #set text(font: "New Computer Modern", lang: "en", size: 10.75pt)
 
-// --- Iconography (Placeholder for now, assuming you'll provide SVGs or similar) ---
-#let icon_email = "✉" // Placeholder
-#let icon_phone = "📞" // Placeholder
-#let icon_linkedin = "🔗" // Placeholder - Consider using a proper LinkedIn icon
-#let icon_github = "🐙"  // Placeholder - Consider using a proper GitHub icon
-#let icon_website = "🌐" // Placeholder
+// --- Iconography ---
+#let icon_email = image("email.png", height: 0.8em)
+#let icon_phone = image("phone.png", height: 0.8em)
+#let icon_location = image("location.png", height: 0.8em)
+#let icon_linkedin = image("linkedin.png", height: 0.8em)
+#let icon_github = image("github.png", height: 0.8em)
+#let icon_website = "🌐" // Keep emoji for website since we don't have a dedicated icon 
 #let element_title = "▶︎▶︎"
 #let grade = "Grade:"
 #let string_space = "   "
@@ -67,21 +68,24 @@
       #text(size: 12pt, weight: "semibold")[#name]
       #v(0.0em)
       
-      // Contact Information
       #let show_styled_contact(data) = {
-        let items = ()
-        if data.email != none { items.push(text(size: 9pt)[#icon_email #data.email]) }
-        if data.phone != none { items.push(text(size: 9pt)[#icon_phone #data.phone]) }
-        if data.linkedin != none { items.push(text(size: 9pt)[#icon_linkedin #link("https://" + data.linkedin.replace("https://", ""))[#data.linkedin]]) }
-        if data.github != none { items.push(text(size: 9pt)[#icon_github #link("https://" + data.github.replace("https://", ""))[#data.github]]) }
-        if data.website != none { items.push(text(size: 9pt)[#icon_website #link("https://" + data.website.replace("https://", ""))[#data.website]]) }
-
-        if items.len() > 0 {
-          // Stack contact items vertically for better use of space
-          for item in items {
-            item
-            v(0.0em)
-          }
+        if data.email != none { 
+          grid(columns: (auto, 1fr), gutter: 0.3em, icon_email, text(size: 9pt)[#data.email])
+        }
+        if data.phone != none { 
+          grid(columns: (auto, 1fr), gutter: 0.3em, icon_phone, text(size: 9pt)[#data.phone])
+        }
+        if data.location != none { 
+          grid(columns: (auto, 1fr), gutter: 0.3em, icon_location, text(size: 9pt)[#data.location])
+        }
+        if data.linkedin != none { 
+          grid(columns: (auto, 1fr), gutter: 0.3em, icon_linkedin, text(size: 9pt)[#link("https://" + data.linkedin.replace("https://", ""))[#data.linkedin]])
+        }
+        if data.github != none { 
+          grid(columns: (auto, 1fr), gutter: 0.3em, icon_github, text(size: 9pt)[#link("https://" + data.github.replace("https://", ""))[#data.github]])
+        }
+        if data.website != none { 
+          grid(columns: (auto, 1fr), gutter: 0.3em, icon_website, text(size: 9pt)[#link("https://" + data.website.replace("https://", ""))[#data.website]])
         }
       }
       #show_styled_contact(contact_data)
@@ -97,20 +101,25 @@
   
   // Contact Information (Centered)
   let show_styled_contact(data) = {
-    let items = ()
-    if data.email != none { items.push(text(size: 9pt)[#icon_email #data.email]) }
-    if data.phone != none { items.push(text(size: 9pt)[#icon_phone #data.phone]) }
-    if data.linkedin != none { items.push(text(size: 9pt)[#icon_linkedin #link("https://" + data.linkedin.replace("https://", ""))[#data.linkedin]]) }
-    if data.github != none { items.push(text(size: 9pt)[#icon_github #link("https://" + data.github.replace("https://", ""))[#data.github]]) }
-    if data.website != none { items.push(text(size: 9pt)[#icon_website #link("https://" + data.website.replace("https://", ""))[#data.website]]) }
-
-    if items.len() > 0 {
-      align(center)[
-        #items.join("  ·  ") // Join with a separator
-      ]
-      v(0.0em) // Space after contact block
+      if data.email != none { 
+        grid(columns: (auto, 1fr), gutter: 0.3em, icon_email, text(size: 9pt)[#data.email])
+      }
+      if data.phone != none { 
+        grid(columns: (auto, 1fr), gutter: 0.3em, icon_phone, text(size: 9pt)[#data.phone])
+      }
+      if data.location != none { 
+        grid(columns: (auto, 1fr), gutter: 0.3em, icon_location, text(size: 9pt)[#data.location])
+      }
+      if data.linkedin != none { 
+        grid(columns: (auto, 1fr), gutter: 0.3em, icon_linkedin, text(size: 9pt)[#link("https://" + data.linkedin.replace("https://", ""))[#data.linkedin]])
+      }
+      if data.github != none { 
+        grid(columns: (auto, 1fr), gutter: 0.3em, icon_github, text(size: 9pt)[#link("https://" + data.github.replace("https://", ""))[#data.github]])
+      }
+      if data.website != none { 
+        grid(columns: (auto, 1fr), gutter: 0.3em, icon_website, text(size: 9pt)[#link("https://" + data.website.replace("https://", ""))[#data.website]])
+      }
     }
-  }
   show_styled_contact(contact_data)
 }
 
