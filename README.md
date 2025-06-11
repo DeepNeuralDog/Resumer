@@ -58,13 +58,5 @@ Follow these steps to get a local copy up and running.
 
 ## 🤝 Contributing
 
-Pull requests are always appreciated! If you'd like to contribute or have suggestions, feel free to:
-
-1.  Fork the Project
-2.  Create your Feature Branch 
-3.  Commit your Changes 
-4.  Push to the Branch 
-5.  Open a Pull Request
-
-If you want to tweak something or discuss a major change, please open an issue first.
+Pull requests are always appreciated! If you'd like to contribute or have suggestions, feel free ....
 
