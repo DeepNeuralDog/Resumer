@@ -1,4 +1,4 @@
-FROM python:3.10-slim-bookworm
+FROM python:3.12-slim-bookworm
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -22,6 +22,8 @@ RUN git clone https://github.com/typst/typst.git /tmp/typst \
 WORKDIR /app
 
 COPY . .
+
+RUN ls -la static/ || echo "Static directory not found"
 
 RUN uv sync --locked
 
