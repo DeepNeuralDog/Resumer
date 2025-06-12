@@ -1,0 +1,132 @@
+{
+  "name": "Md Hasibul Hasan",
+  "contact": {
+    "email": "md.hasibul.hasan.code@gmail.com",
+    "phone": " +8801729373218",
+    "location": "Middle Badda, Dhaka, Bangladesh",
+    "linkedin": "linkedin.com/in/md-hasibul-hasan-376236316",
+    "github": "https://github.com/DeepNeuralDog",
+    "website": ""
+  },
+  "summary": "AI Engineer with 3+ years of experience building and deploying intelligent systems across computer vision, NLP, generative AI, and multi-agent architectures. Proven track record in both research—developing a high-performing violence detection model—and real-world impact through scalable, end-to-end ML solutions.",
+  "skills": [
+    {
+      "skill_name": "Autonomous Agents & Multi-Agent Systems",
+      "bullet_points": [
+        "Autonomous Agents, LLM Agents, AI Agents",
+        "Agent Orchestration, Multi-Agent Systems",
+        "LangChain, LangGraph, Agent Development Kit",
+        "RAG (Retrieval-Augmented Generation)",
+        "Task Automation, Knowledge Retrieval",
+        "MCP Servers, A2A Protocol",
+        "API & Vector DB Integration (contextual)"
+      ]
+    },
+    {
+      "skill_name": "Core AI/ML Engineering & MLOps",
+      "bullet_points": [
+        "Model Training, Evaluation & Optimization",
+        "Scalable Inference, Real-time Inference",
+        "Pipeline Automation, MLOps",
+        "Production Deployment, Model Lifecycle",
+        "API Integration, Application Deployment"
+      ]
+    },
+    {
+      "skill_name": "Data Engineering & Analysis",
+      "bullet_points": [
+        "Data Cleaning, Preprocessing, Transformation",
+        "Feature Engineering, Outlier Detection",
+        "Exploratory Data Analysis (EDA)",
+        "Data Visualization (Matplotlib, Seaborn)",
+        "pandas, numpy"
+      ]
+    },
+    {
+      "skill_name": "Databases",
+      "bullet_points": [
+        "PostgreSQL, MySQL, MongoDB",
+        "PGvector, ChromaDB, FAISS, Pinecone",
+        "Redis, ElasticSearch"
+      ]
+    },
+    {
+      "skill_name": "Languages & Cloud Platform",
+      "bullet_points": [
+        "Python, Javascript, Go",
+        "AWS, GCP"
+      ]
+    }
+  ],
+  "experience": [],
+  "projects": [
+    {
+      "project_name": "Hadeeth Verification Multi-agent System",
+      "github_link": "https://github.com/DeepNeuralDog/hadeeth_detector",
+      "bullet_points": [
+        "Designed a fact-checking system leveraging ADK(Agent Development Kit) to assess hadith authenticity using Quranic and Hadith knowledge",
+        "Each agent specialized in different subtasks contributing to a final verdict with explainable evidence aggregation.",
+        "Demonstrated advanced use of multi-agent orchestration, retrieval-augmented generation (RAG), and modular agent communication."
+      ]
+    },
+    {
+      "project_name": "Multiagent RAG: Study-Focused Knowledge Assistant",
+      "github_link": "https://github.com/DeepNeuralDog/MultiAgent-RAG-Server",
+      "bullet_points": [
+        "Built a multi-agent RAG system with LangChain + LangGraph to automate study-related tasks through agent collaboration.",
+        "Agents handled retrieval validation, search, flashcard creation, quizzing, study plans, and summarization.",
+        "Showcased skills in autonomous agent design and LLM-driven task orchestration."
+      ]
+    },
+    {
+      "project_name": "Real-time Violence Detection System (Thesis)",
+      "github_link": "https://github.com/DeepNeuralDog/Violence-detector",
+      "bullet_points": [
+        "Developed a lightweight transformer-based model with Temporal Cross Attention Fusion and a memory module for detecting violence in CCTV footage.",
+        "Outperformed state-of-the-art methods on the UCF Crime dataset, achieving high accuracy in both binary and multi-class settings.",
+        "Optimized for real-time inference, showcasing skills in deep learning, video processing, and deployment."
+      ]
+    },
+    {
+      "project_name": "AI-Powered Job Matching Platform",
+      "github_link": "https://github.com/DeepNeuralDog/the_job_matching_wizard",
+      "bullet_points": [
+        "Built a full-stack AI platform that matches job seekers and employers using vector similarity (KNN and cosine) over curated embeddings.",
+        "Integrated PostgreSQL + PGVector with backend APIs and a responsive frontend for candidates and recruiters.",
+        "Implemented smart filtering and transparent matching logic using contextual embeddings and scalable inference pipelines."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "education_name": "Secondary School Certificate(SSC)",
+      "institution": "Suti VM Pilot Model High School, Gopalpur, Tangail",
+      "start": "2013",
+      "end": "2017",
+      "grade": "4.86"
+    },
+    {
+      "education_name": "Higher Secondary Certificate",
+      "institution": "Gopalpur Govt. College, Gopalpur, Tangail",
+      "start": "2017",
+      "end": "2020",
+      "grade": "4.45"
+    },
+    {
+      "education_name": "Bachelor of Science in Computer Science & Engineering",
+      "institution": "Brac University",
+      "start": "2021",
+      "end": "2025",
+      "grade": "3.45"
+    }
+  ],
+  "references": [
+    {
+      "referer_name": "MD Ahsan Habib",
+      "referer_institute": "Maple IT Solutions",
+      "position": "Embedded System Engineer",
+      "connection_type": "Personal",
+      "institution_url": "https://mapleitsolutions.net/"
+    }
+  ]
+}

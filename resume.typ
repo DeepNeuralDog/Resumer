@@ -84,9 +84,9 @@
         if data.github != none { 
           grid(columns: (auto, 1fr), gutter: 0.3em, icon_github, text(size: 9pt)[#link("https://" + data.github.replace("https://", ""))[#data.github]])
         }
-        if data.website != none { 
-          grid(columns: (auto, 1fr), gutter: 0.3em, icon_website, text(size: 9pt)[#link("https://" + data.website.replace("https://", ""))[#data.website]])
-        }
+        // if data.website != none { 
+        //   grid(columns: (auto, 1fr), gutter: 0.3em, icon_website, text(size: 9pt)[#link("https://" + data.website.replace("https://", ""))[#data.website]])
+        // }
       }
       #show_styled_contact(contact_data)
     ]
@@ -116,9 +116,9 @@
       if data.github != none { 
         grid(columns: (auto, 1fr), gutter: 0.3em, icon_github, text(size: 9pt)[#link("https://" + data.github.replace("https://", ""))[#data.github]])
       }
-      if data.website != none { 
-        grid(columns: (auto, 1fr), gutter: 0.3em, icon_website, text(size: 9pt)[#link("https://" + data.website.replace("https://", ""))[#data.website]])
-      }
+      // if data.website != none { 
+      //   grid(columns: (auto, 1fr), gutter: 0.3em, icon_website, text(size: 9pt)[#link("https://" + data.website.replace("https://", ""))[#data.website]])
+      // }
     }
   show_styled_contact(contact_data)
 }
@@ -126,7 +126,9 @@
 // Summary Section
 #if summary_text != none and summary_text != "" {
   section_title("Summary")
-  text(summary_text)
+  block(width: 100%)[
+    #text(summary_text)
+  ]
   v(0.0em)
 }
 
