@@ -1,16 +1,17 @@
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
-from fastapi import FastAPI, UploadFile, Form, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from tempfile import NamedTemporaryFile
 from typing import List, Optional
 from pydantic import BaseModel
 from PIL import Image
-import subprocess
-import uvicorn
+import os
+import shutil
 import jinja2
 import base64
-import os
 import io
+import subprocess
+import traceback
 
 app = FastAPI()
 
@@ -22,7 +23,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-TEMPLATE_PATH = "resume.typ"
+TEMPLATE_DIR = "templates"
 
 class Contact(BaseModel):
     email: Optional[str] = None
@@ -96,95 +97,23 @@ def py_to_typst(val):
     else:
         return 'none'
 
-
-# @app.post("/generate-pdf")
-# async def generate_pdf(data: ResumeData, request: Request):
-#     try:
-#         env = jinja2.Environment(
-#             variable_start_string='{{',
-#             variable_end_string='}}',
-#             block_start_string='{%',
-#             block_end_string='%}',
-#             comment_start_string='{#JINJA#',
-#             comment_end_string='#JINJA#}'
-#         )
-#         env.filters['typst'] = py_to_typst
-#         with open(TEMPLATE_PATH) as f:
-#             typst_template = f.read()
-#         template = env.from_string(typst_template)
-
-#         with NamedTemporaryFile("w", suffix=".typ", delete=False) as typ_file:
-#             typ_file_path = typ_file.name
-
-#         image_typst_path = None
-#         image_full_path = None
-        
-#         if data.image_base64:
-#             try:
-#                 if ',' in data.image_base64:
-#                     header, image_data_b64 = data.image_base64.split(',', 1)
-#                 else:
-#                     image_data_b64 = data.image_base64
-                
-#                 image_data = base64.b64decode(image_data_b64)
-                
-#                 image = Image.open(io.BytesIO(image_data))
-                
-#                 if image.mode in ('RGBA', 'LA', 'P'):
-#                     image = image.convert('RGBA')
-#                 elif image.mode != 'RGB':
-#                     image = image.convert('RGB')
-                
-#                 typ_dir = os.path.dirname(typ_file_path)
-#                 image_filename = "resume_image.png"
-#                 image_full_path = os.path.join(typ_dir, image_filename)
-                
-#                 image.save(image_full_path, 'PNG', optimize=True)
-                
-#                 image_typst_path = image_filename
-                
-#             except Exception as e:
-#                 print(f"Error processing image: {e}")
-
-#         typst_filled = template.render(
-#             name=data.name,
-#             contact=py_to_typst(data.contact.dict()),
-#             summary=py_to_typst(data.summary),
-#             image_path=py_to_typst(image_typst_path),
-#             skills=py_to_typst([s.dict() for s in data.skills]),
-#             experience=py_to_typst([e.dict() for e in data.experience]),
-#             projects=py_to_typst([p.dict() for p in data.projects]),
-#             education=py_to_typst([e.dict() for e in data.education]),
-#             references=py_to_typst([r.dict() for r in data.references])
-#         )
-#         print("---- FILLED TYPST TEMPLATE ----")
-#         print(typst_filled)
-#         print("-----------------------------")
-        
-#         with open(typ_file_path, "w") as typ_file:
-#             typ_file.write(typst_filled)
-            
-#         pdf_path = typ_file_path.replace(".typ", ".pdf")
-#         try:
-#             subprocess.run(["typst", "compile", typ_file_path, pdf_path], check=True, capture_output=True, text=True)
-#         except subprocess.CalledProcessError as e:
-#             print("TYPST ERROR OUTPUT:", e.stderr)
-#             if image_full_path and os.path.exists(image_full_path):
-#                 os.unlink(image_full_path)
-#             return JSONResponse({"error": e.stderr}, status_code=500)
-        
-#         if image_full_path and os.path.exists(image_full_path):
-#             os.unlink(image_full_path)
-
-#         return FileResponse(pdf_path, media_type="application/pdf", filename="resume.pdf")
-#     except Exception as e:
-#         import traceback
-#         print("SERVER ERROR:", traceback.format_exc())
-#         return JSONResponse({"error": str(e)}, status_code=500)
+@app.get("/templates")
+async def list_templates():
+    try:
+        templates = [f for f in os.listdir(TEMPLATE_DIR) if f.endswith(".typ")]
+        return JSONResponse(templates)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.post("/generate-pdf")
 async def generate_pdf(data: ResumeData, request: Request):
     try:
+        template_name = request.headers.get("X-Template-Name", "resume.typ")
+        template_path = os.path.join(TEMPLATE_DIR, template_name)
+
+        if not os.path.exists(template_path):
+            return JSONResponse({"error": f"Template '{template_name}' not found."}, status_code=404)
+
         env = jinja2.Environment(
             variable_start_string='{{',
             variable_end_string='}}',
@@ -194,7 +123,7 @@ async def generate_pdf(data: ResumeData, request: Request):
             comment_end_string='#JINJA#}'
         )
         env.filters['typst'] = py_to_typst
-        with open(TEMPLATE_PATH) as f:
+        with open(template_path) as f:
             typst_template = f.read()
         template = env.from_string(typst_template)
 
@@ -202,7 +131,6 @@ async def generate_pdf(data: ResumeData, request: Request):
             typ_file_path = typ_file.name
 
         # Copy icon files to the same directory as the .typ file
-        import shutil
         typ_dir = os.path.dirname(typ_file_path)
         icon_files = ["email.png", "phone.png", "linkedin.png", "github.png", "location.png"]
         
@@ -219,6 +147,7 @@ async def generate_pdf(data: ResumeData, request: Request):
             try:
                 if ',' in data.image_base64:
                     header, image_data_b64 = data.image_base64.split(',', 1)
+                    image_data_b64 = data.image_base64.split(',', 1)[1] # Added to handle data URL prefix
                 else:
                     image_data_b64 = data.image_base64
                 
@@ -227,9 +156,9 @@ async def generate_pdf(data: ResumeData, request: Request):
                 image = Image.open(io.BytesIO(image_data))
                 
                 if image.mode in ('RGBA', 'LA', 'P'):
-                    image = image.convert('RGBA')
+                    image = image.convert('RGB') # Convert to RGB if has alpha or is palette-based
                 elif image.mode != 'RGB':
-                    image = image.convert('RGB')
+                    image = image.convert('RGB') # Convert other modes to RGB
                 
                 image_filename = "resume_image.png"
                 image_full_path = os.path.join(typ_dir, image_filename)
@@ -269,9 +198,9 @@ async def generate_pdf(data: ResumeData, request: Request):
                 os.unlink(image_full_path)
             # Clean up icon files
             for icon_file in icon_files:
-                icon_path = os.path.join(typ_dir, icon_file)
-                if os.path.exists(icon_path):
-                    os.unlink(icon_path)
+                icon_path_to_remove = os.path.join(typ_dir, icon_file) # Corrected variable name
+                if os.path.exists(icon_path_to_remove): # Check before unlinking
+                    os.unlink(icon_path_to_remove)
             return JSONResponse({"error": e.stderr}, status_code=500)
         
         # Clean up temp files after successful compilation
@@ -282,7 +211,7 @@ async def generate_pdf(data: ResumeData, request: Request):
         for icon_file in icon_files:
             icon_path = os.path.join(typ_dir, icon_file)
             if os.path.exists(icon_path):
-                os.unlink(icon_path)
+                os.unlink(icon_path) # Unlink the copied icon files
 
         return FileResponse(pdf_path, media_type="application/pdf", filename="resume.pdf")
     except Exception as e:
@@ -302,11 +231,3 @@ async def index():
 @app.get("/favicon.ico")
 async def favicon():
     return JSONResponse({}, status_code=404)
-
-def main():
-    print("Hello from resumer!")
-
-
-if __name__ == "__main__":
-    main()
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
