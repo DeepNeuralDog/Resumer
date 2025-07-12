@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Resumer</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0; padding: 0; }
+    .container { max-width: 500px; margin: 40px auto; background: #fff; padding: 32px; border-radius: 10px; box-shadow: 0 2px 8px #0001; }
+    h1 { text-align: center; }
+    label { display: block; margin-top: 16px; font-weight: bold; }
+    input { width: calc(100% - 16px); padding: 8px; margin-top: 4px; border-radius: 4px; border: 1px solid #ccc; }
+    button { width: 100%; margin-top: 20px; padding: 10px 20px; border: none; background: #222; color: #fff; border-radius: 4px; cursor: pointer; }
+    .error { color: #e74c3c; margin-top: 8px; }
+    .success { color: #27ae60; margin-top: 8px; }
+    .link { text-align: center; margin-top: 16px; }
+    .github-banner { text-align: center; margin-bottom: 20px; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; }
+    .github-banner p { margin: 0; color: white; font-size: 14px; }
+    .github-banner a { color: #ffd700; text-decoration: none; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Login</h1>
+    <div class="github-banner">
+      <p>⭐ <a href="https://github.com/DeepNeuralDog/Resumer" target="_blank">GitHub repo here</a> - Help make Resumer better! ⭐</p>
+    </div>
+
+    <div id="success-message" class="success"></div>
+    <form id="login-form">
+      <label>Email <input name="email" type="email" required></label>
+      <label>Password <input name="password" type="password" required></label>
+      
+      <div id="error-message" class="error"></div>
+      <button type="submit">Login</button>
+    </form>
+    <div class="link">
+      Don't have an account? <a href="/register">Register</a>
+    </div>
+  </div>
+
+  <script>
+    // Check for registration success parameter
+    window.onload = function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('registered') === 'true') {
+        document.getElementById('success-message').textContent = 'Registration successful! Please login.';
+      }
+    };
+  
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const errorDiv = document.getElementById('error-message');
+      
+      const loginData = {
+        email: form.email.value,
+        password: form.password.value
+      };
+      
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(loginData)
+        });
+        
+        if (response.ok) {
+          // Redirect to main page after successful login
+          window.location.href = '/';
+        } else {
+          const data = await response.json();
+          errorDiv.textContent = data.detail || 'Invalid email or password';
+        }
+      } catch (err) {
+        errorDiv.textContent = 'Network error. Please try again.';
+        console.error(err);
+      }
+    });
+  </script>
+</body>
+</html>

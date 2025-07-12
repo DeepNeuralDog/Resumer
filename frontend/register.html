@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register - Resumer</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0; padding: 0; }
+    .container { max-width: 500px; margin: 40px auto; background: #fff; padding: 32px; border-radius: 10px; box-shadow: 0 2px 8px #0001; }
+    h1 { text-align: center; }
+    label { display: block; margin-top: 16px; font-weight: bold; }
+    input { width: calc(100% - 16px); padding: 8px; margin-top: 4px; border-radius: 4px; border: 1px solid #ccc; }
+    button { width: 100%; margin-top: 20px; padding: 10px 20px; border: none; background: #222; color: #fff; border-radius: 4px; cursor: pointer; }
+    .error { color: #e74c3c; margin-top: 8px; }
+    .link { text-align: center; margin-top: 16px; }
+    .github-banner { text-align: center; margin-bottom: 20px; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; }
+    .github-banner p { margin: 0; color: white; font-size: 14px; }
+    .github-banner a { color: #ffd700; text-decoration: none; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Create Account</h1>
+    <div class="github-banner">
+      <p>⭐ <a href="https://github.com/DeepNeuralDog/Resumer" target="_blank">GitHub repo here</a> - Help make Resumer better! ⭐</p>
+    </div>
+
+    <form id="register-form">
+      <label>Name <input name="name" required></label>
+      <label>Email <input name="email" type="email" required></label>
+      <label>Password <input name="password" type="password" required></label>
+      <label>Confirm Password <input name="confirm_password" type="password" required></label>
+      <label>Phone <input name="phone" type="tel"></label>
+      <label>Location <input name="location"></label>
+      <label>LinkedIn Profile URL <input name="linkedin" type="url" placeholder="linkedin.com/in/yourprofile"></label>
+      <label>GitHub Profile URL <input name="github" type="url" placeholder="github.com/yourusername"></label>
+      <label>Website URL <input name="website" type="url" placeholder="yourdomain.com"></label>
+      
+      <div id="error-message" class="error"></div>
+      <button type="submit">Register</button>
+    </form>
+    <div class="link">
+      Already have an account? <a href="/login">Login</a>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const errorDiv = document.getElementById('error-message');
+      
+      // Basic validation
+      if (form.password.value !== form.confirm_password.value) {
+        errorDiv.textContent = "Passwords don't match";
+        return;
+      }
+      
+      const userData = {
+        name: form.name.value,
+        email: form.email.value,
+        password: form.password.value,
+        phone: form.phone.value || null,
+        location: form.location.value || null,
+        linkedin: form.linkedin.value || null,
+        github: form.github.value || null,
+        website: form.website.value || null
+      };
+      
+      try {
+        const response = await fetch('/api/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(userData)
+        });
+        
+        if (response.ok) {
+          // Redirect to login page after successful registration
+          window.location.href = '/login?registered=true';
+        } else {
+          const data = await response.json();
+          errorDiv.textContent = data.detail || 'Registration failed';
+        }
+      } catch (err) {
+        errorDiv.textContent = 'Network error. Please try again.';
+        console.error(err);
+      }
+    });
+  </script>
+</body>
+</html>

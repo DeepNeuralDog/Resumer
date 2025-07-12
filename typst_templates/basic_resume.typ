@@ -195,13 +195,12 @@
     if details_content != [] { // Check if any content was actually added
       text(size: 9pt)[ (#details_content)]
     }
-    v(0.0em) // Space after each education entry
+    v(0.0em)
     text()[#string_space #grade #edu_item.grade]
     v(0.0em)
   }
 }
 
-// References Section
 #if references_list.len() > 0 {
   section_title("References")
   for ref_item in references_list {
@@ -211,5 +210,6 @@
     text()[(#ref_item.institution_url)]
     v(0.0em)
     text(weight: 550)[Connection: #ref_item.connection_type]
+    v(0.0em)
   }
 }

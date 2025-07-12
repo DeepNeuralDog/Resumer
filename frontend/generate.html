@@ -10,19 +10,98 @@
     h1 { text-align: center; }
     label { display: block; margin-top: 16px; font-weight: bold; }
     input, textarea { width: calc(100% - 16px); padding: 8px; margin-top: 4px; border-radius: 4px; border: 1px solid #ccc; } /* Adjusted width for padding */
-    textarea { min-height: 60px; } /* Increased min-height for better usability */
+    .item-block input, .item-block textarea {
+        border: none !important;
+        border-bottom: none !important;
+        outline: none;
+        box-shadow: none !important;
+        text-decoration: none !important;
+    }
+    .item-block > label > input {
+        border-bottom: 1px solid #eee;
+        border-radius: 0;
+        margin-bottom: 10px;
+    }
+    .item-block > label > input:focus {
+        border-bottom-color: #007bff;
+    }
+    textarea { min-height: 60px; }
     button { margin-top: 20px; padding: 10px 20px; border: none; background: #222; color: #fff; border-radius: 4px; cursor: pointer; }
     .actions { display: flex; gap: 10px; }
     .preview { margin-top: 32px; text-align: center; }
     iframe { width: 100%; height: 600px; border: 1px solid #ccc; }
     .section-list { margin-top: 20px; }
-    .item-block { background: #f9f9f9; padding: 16px; margin: 8px 0; border-radius: 4px; position: relative; }
+    .item-block { 
+        background: #f9f9f9; 
+        padding: 16px; 
+        margin: 8px 0; 
+        border-radius: 4px; 
+        position: relative; 
+        border: 1px solid #e0e0e0;
+    }
     .remove-btn { position: absolute; top: 10px; right: 10px; background: #e74c3c; border: none; color: white; padding: 5px 10px; border-radius: 3px; cursor: pointer; }
     .add-btn { margin-top: 10px; padding: 10px 15px; border: none; background: #007bff; color: white; border-radius: 4px; cursor: pointer; }
     .add-bullet-btn { margin-top: 5px; padding: 5px 10px; border: none; background: #28a745; color: white; border-radius: 3px; cursor: pointer; font-size: 0.8em; }
     fieldset { border: 1px solid #ccc; border-radius: 4px; padding: 16px; margin-top: 16px; }
     legend { font-weight: bold; }
-    .bullet-point-input { margin-bottom: 5px; }
+    .bullet-point-input { margin-bottom: 5px; display: flex; align-items: center; }
+    .bullet-point-input textarea { flex-grow: 1; }
+    .remove-bullet-btn {
+        background: url('/static/trash.png') no-repeat center center;
+        background-size: contain;
+        border: none;
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+        opacity: 0.5;
+        transition: opacity 0.2s;
+        margin-left: 8px;
+    }
+    .remove-bullet-btn:hover {
+        opacity: 1;
+    }
+    .bullet-point-input {
+        display: flex;
+        align-items: center;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        padding: 8px;
+        margin-bottom: 5px;
+        transition: border-color 0.2s;
+    }
+    .bullet-point-input:focus-within {
+        border-color: #007bff;
+    }
+    .bullet-point-input textarea {
+        flex-grow: 1;
+        border: none !important;
+        border-bottom: none !important;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        outline: none;
+        resize: none;
+        width: 100%;
+        box-shadow: none !important; /* Prevent any shadow effects */
+        text-decoration: none !important; /* Prevent any underline from text-decoration */
+    }
+    .autocomplete-suggestions {
+        border: 1px solid #ccc;
+        border-top: none;
+        max-height: 150px;
+        overflow-y: auto;
+        position: absolute;
+        background-color: white;
+        z-index: 1000;
+        width: calc(100% - 18px);
+    }
+    .autocomplete-suggestion {
+        padding: 8px;
+        cursor: pointer;
+    }
+    .autocomplete-suggestion:hover, .autocomplete-suggestion.active {
+        background-color: #f0f0f0;
+    }
   </style>
 </head>
 <body>
@@ -35,7 +114,8 @@
     </div>
     <form id="resume-form">
       <label>Name <input name="name" required></label>
-      <label>Summary <textarea name="summary"></textarea></label>
+      <label>Summary <textarea name="summary" onfocus="setupAutocomplete('summary', '/api/summaries')"></textarea></label>
+      <div id="summary-suggestions" class="autocomplete-suggestions"></div>
       <label>Passport Size Image <input type="file" id="image_upload" name="image_upload" accept="image/*"></label>
       <fieldset>
         <legend>Contact Info</legend>
@@ -83,22 +163,79 @@
             Load from JSON
             <input type="file" id="import-json" accept=".json" onchange="importJSON(event)" style="display: none;">
         </label>
+        <button type="button" onclick="logout()" style="background: #e74c3c;">Logout</button>
       </div>
     </form>
+    <div id="debug-info" style="margin-top: 20px; padding: 10px; background: #eee; border: 1px solid #ccc; font-family: monospace; white-space: pre-wrap;">
+      Debug Info will appear here.
+    </div>
     <div class="preview" id="preview"></div>
   </div>
   <script>
 
-function createTextInput(name, placeholder, value = "", type = "text") {
-      return `<input type="${type}" name="${name}" placeholder="${placeholder}" value="${value}" style="width: calc(100% - 16px);">`;
+    function logout() {
+      fetch('/api/logout')
+        .then(() => {
+          window.location.href = '/login';
+        })
+        .catch(err => {
+          console.error('Logout failed', err);
+        });
     }
 
-    function createTextareaInput(name, placeholder, value = "") {
-      return `<textarea name="${name}" placeholder="${placeholder}" style="width: calc(100% - 16px); min-height: 40px;">${value}</textarea>`;
+    function createTextInput(name, placeholder, value = "", type = "text", oninputAction = "") {
+        return `<input type="${type}" name="${name}" placeholder="${placeholder}" value="${value}" oninput="${oninputAction}" onkeydown="handleKeydown(event, '${name}')" onfocus="${oninputAction}">`;
+    }
+
+    function createTextareaInput(name, placeholder, value = "", oninputAction = "") {
+      // Removed inline style, will be handled by CSS rules
+      return `<textarea name="${name}" placeholder="${placeholder}" oninput="${oninputAction}" onkeydown="handleKeydown(event, '${name}')" onfocus="${oninputAction}">${value}</textarea>`;
     }
     
     function createBulletPointInput(namePrefix, idx, pointIdx, value = "") {
-        return `<div class="bullet-point-input"><textarea name="${namePrefix}-${idx}-bullet-${pointIdx}" placeholder="Bullet point" style="width: calc(100% - 16px);">${value}</textarea></div>`;
+        const oninputAction = `handleBulletAutocomplete(event)`;
+        const onfocusAction = `handleBulletAutocomplete(event)`;
+        // The containing div now handles the border and focus state.
+        // The textarea has its border and outline removed via CSS.
+        // The remove button is now styled via CSS to use the trash icon.
+        return `<div class="bullet-point-input">
+                    <textarea name="${namePrefix}-${idx}-bullet-${pointIdx}" placeholder="Bullet point" oninput="${oninputAction}" onfocus="${onfocusAction}" onkeydown="handleKeydown(event, this.name)">${value}</textarea>
+                    <button type="button" class="remove-bullet-btn" onclick="this.parentElement.remove()" title="Delete bullet point"></button>
+                </div>`;
+    }
+
+    function handleBulletAutocomplete(event) {
+        const textarea = event.target;
+        const name = textarea.name; 
+        const parts = name.split('-');
+        const namePrefix = parts[0];
+        const idx = parts[1];
+
+        let apiResource;
+        if (namePrefix === 'skill') {
+            apiResource = 'skills';
+        } else if (namePrefix === 'exp') {
+            apiResource = 'experiences';
+        } else if (namePrefix === 'proj') {
+            apiResource = 'projects';
+        } else {
+            return; // Not a supported type for bullet autocomplete
+        }
+
+        const id = document.querySelector(`#${namePrefix}-${idx}-id`).value;
+        const debugDiv = document.getElementById('debug-info');
+
+        console.log(`[Debug] Bullet autocomplete triggered for: ${name}`);
+        
+        if (id) {
+            const apiUrl = `/api/${apiResource}/${id}/bullets`;
+            console.log(`[Debug] Parent ID found: ${id}. Calling setupAutocomplete with URL: ${apiUrl}`);
+            debugDiv.textContent = `Triggered bullet autocomplete for: ${name}\nParent ID: ${id}\nAPI URL: ${apiUrl}?q=${textarea.value}`;
+            setupAutocomplete(name, apiUrl);
+        } else {
+            console.log("[Debug] Parent ID not found. Skipping bullet autocomplete.");
+            debugDiv.textContent = `Triggered bullet autocomplete for: ${name}\nParent ID not found. Cannot fetch suggestions.`;
+        }
     }
 
     function addBulletPoint(sectionId, namePrefix, itemIdx) {
@@ -118,8 +255,10 @@ function createTextInput(name, placeholder, value = "", type = "text") {
       const bulletsHtml = (skill.bullet_points || [""]).map((point, i) => createBulletPointInput('skill', idx, i, point)).join('');
       const html = `
         <div class="item-block" id="skills-${idx}">
+          <input type="hidden" id="skill-${idx}-id" name="skill-${idx}-id">
           <button type="button" class="remove-btn" onclick="removeItem('skills', ${idx})">Remove</button>
-          <label>Skill Name: ${createTextInput(`skill-${idx}-name`, 'e.g., Programming Languages', skill.skill_name || '')}</label>
+          <label>Skill Name: ${createTextInput(`skill-${idx}-name`, 'e.g., Programming Languages', skill.skill_name || '', 'text', "setupAutocomplete('skill-" + idx + "-name', '/api/skills', " + idx + ")")}</label>
+          <div id="skill-${idx}-name-suggestions" class="autocomplete-suggestions"></div>
           <div id="skills-${idx}-bullets">
             ${bulletsHtml}
           </div>
@@ -133,9 +272,13 @@ function createTextInput(name, placeholder, value = "", type = "text") {
       const bulletsHtml = (exp.bullet_points || [""]).map((point, i) => createBulletPointInput('exp', idx, i, point)).join('');
       const html = `
         <div class="item-block" id="experience-${idx}">
+          <input type="hidden" id="exp-${idx}-id" name="exp-${idx}-id">
           <button type="button" class="remove-btn" onclick="removeItem('experience', ${idx})">Remove</button>
-          <label>Company/Role: ${createTextInput(`exp-${idx}-name`, 'e.g., Software Engineer at Tech Corp', exp.experience_name || '')}</label>
-          <label>Years: ${createTextInput(`exp-${idx}-years`, 'e.g., 2020 - Present', exp.years || '')}</label>
+          <label>Company/Role: ${createTextInput(`exp-${idx}-name`, 'e.g., Software Engineer at Tech Corp', exp.experience_name || '', 'text', "setupAutocomplete('exp-" + idx + "-name', '/api/experiences', " + idx + ")")}</label>
+          <div id="exp-${idx}-name-suggestions" class="autocomplete-suggestions"></div>
+          <label>Start Year: ${createTextInput(`exp-${idx}-start`, 'e.g., 2020', exp.start_year || '')}</label>
+          <label>End Year: ${createTextInput(`exp-${idx}-end`, 'e.g., 2022 or Present', exp.end_year || '')}</label>
+          <label>Ongoing: <input type="checkbox" name="exp-${idx}-ongoing" ${exp.ongoing ? 'checked' : ''}></label>
           <div id="experience-${idx}-bullets">
             ${bulletsHtml}
           </div>
@@ -149,8 +292,10 @@ function createTextInput(name, placeholder, value = "", type = "text") {
       const bulletsHtml = (proj.bullet_points || [""]).map((point, i) => createBulletPointInput('proj', idx, i, point)).join('');
       const html = `
         <div class="item-block" id="projects-${idx}">
+          <input type="hidden" id="proj-${idx}-id" name="proj-${idx}-id">
           <button type="button" class="remove-btn" onclick="removeItem('projects', ${idx})">Remove</button>
-          <label>Project Name: ${createTextInput(`proj-${idx}-name`, 'e.g., Personal Portfolio Website', proj.project_name || '')}</label>
+          <label>Project Name: ${createTextInput(`proj-${idx}-name`, 'e.g., Personal Portfolio Website', proj.project_name || '', 'text', "setupAutocomplete('proj-" + idx + "-name', '/api/projects', " + idx + ")")}</label>
+          <div id="proj-${idx}-name-suggestions" class="autocomplete-suggestions"></div>
           <label>GitHub Link: ${createTextInput(`proj-${idx}-link`, 'e.g., github.com/user/repo', proj.github_link || '', 'url')}</label>
           <div id="projects-${idx}-bullets">
             ${bulletsHtml}
@@ -165,7 +310,8 @@ function createTextInput(name, placeholder, value = "", type = "text") {
       const html = `
         <div class="item-block" id="education-${idx}">
           <button type="button" class="remove-btn" onclick="removeItem('education', ${idx})">Remove</button>
-          <label>Degree/Certificate: ${createTextInput(`edu-${idx}-name`, 'e.g., B.S. in Computer Science', edu.education_name || '')}</label>
+          <label>Degree/Certificate: ${createTextInput(`edu-${idx}-name`, 'e.g., B.S. in Computer Science', edu.education_name || '', 'text', "setupAutocomplete('edu-" + idx + "-name', '/api/educations/names')")}</label>
+          <div id="edu-${idx}-name-suggestions" class="autocomplete-suggestions"></div>
           <label>Institution: ${createTextInput(`edu-${idx}-institution`, 'e.g., University of Example', edu.institution || '')}</label>
           <label>Start Year: ${createTextInput(`edu-${idx}-start`, 'e.g., 2018', edu.start || '')}</label>
           <label>End Year: ${createTextInput(`edu-${idx}-end`, 'e.g., 2022 or Present', edu.end || '')}</label>
@@ -240,7 +386,9 @@ function createTextInput(name, placeholder, value = "", type = "text") {
         if (nameEl) {
           experience.push({
             experience_name: nameEl.value,
-            years: form[`exp-${i}-years`].value,
+            start_year: form[`exp-${i}-start`].value,
+            end_year: form[`exp-${i}-end`].value,
+            ongoing: form[`exp-${i}-ongoing`].checked,
             bullet_points: getBulletPoints('experience', i, 'exp')
           });
         }
@@ -364,6 +512,147 @@ function createTextInput(name, placeholder, value = "", type = "text") {
       refCount = 0;
       (data.references || []).forEach(addReference);
     }
+
+    let currentSuggestions = [];
+    let activeSuggestionIndex = -1;
+
+    async function setupAutocomplete(elementName, apiUrl, itemIndex = -1) {
+        const input = document.querySelector(`[name="${elementName}"]`);
+        let suggestionsContainer = document.getElementById(`${elementName}-suggestions`);
+        
+        console.log(`[Debug] setupAutocomplete called for element: '${elementName}' with base URL: '${apiUrl}'`);
+
+        if (!suggestionsContainer) {
+            console.log(`[Debug] Suggestions container not found for '${elementName}-suggestions'. Creating it dynamically.`);
+            suggestionsContainer = document.createElement('div');
+            suggestionsContainer.id = `${elementName}-suggestions`;
+            suggestionsContainer.className = 'autocomplete-suggestions';
+            input.parentNode.appendChild(suggestionsContainer);
+        }
+
+        const query = input.value;
+        const fullApiUrl = `${apiUrl}?q=${encodeURIComponent(query)}`;
+        console.log(`[Debug] Fetching suggestions from: ${fullApiUrl}`);
+
+        try {
+            const response = await fetch(fullApiUrl);
+            const data = await response.json();
+            console.log(`[Debug] Received data for '${elementName}':`, data);
+
+            currentSuggestions = data;
+
+            suggestionsContainer.innerHTML = '';
+            currentSuggestions.forEach((item, index) => {
+                const div = document.createElement('div');
+                // Display logic
+                let textContent;
+                if (typeof item === 'string') {
+                    textContent = item;
+                } else {
+                    textContent = item.skill_name || item.experience_name || item.project_name || item.education_name;
+                }
+                div.textContent = textContent;
+                div.className = 'autocomplete-suggestion';
+                div.onclick = () => selectSuggestion(index, elementName, itemIndex);
+                suggestionsContainer.appendChild(div);
+            });
+            activeSuggestionIndex = -1;
+        } catch (error) {
+            console.error(`[Debug] Error fetching or processing suggestions for '${elementName}':`, error);
+            const debugDiv = document.getElementById('debug-info');
+            debugDiv.textContent += `\n\nERROR fetching from ${fullApiUrl}. See console for details.`;
+        }
+    }
+
+    function selectSuggestion(index, elementName, itemIndex) {
+        console.log(`[Debug] selectSuggestion called for element: '${elementName}', index: ${index}`);
+        const suggestion = currentSuggestions[index];
+        const input = document.querySelector(`[name="${elementName}"]`);
+        const suggestionsContainer = document.getElementById(`${elementName}-suggestions`);
+
+        console.log(`[Debug] Selected suggestion object:`, suggestion);
+
+        if (typeof suggestion === 'string') {
+            input.value = suggestion;
+        } else if (typeof suggestion === 'object' && suggestion !== null) {
+            if (suggestion.skill_name) { // It's a skill
+                document.querySelector(`[name="skill-${itemIndex}-name"]`).value = suggestion.skill_name;
+                document.querySelector(`#skill-${itemIndex}-id`).value = suggestion.id;
+            }
+            else if (suggestion.project_name) { // It's a project
+                document.querySelector(`[name="proj-${itemIndex}-name"]`).value = suggestion.project_name;
+                document.querySelector(`[name="proj-${itemIndex}-link"]`).value = suggestion.github_link || '';
+                document.querySelector(`#proj-${itemIndex}-id`).value = suggestion.id;
+            } else if (suggestion.experience_name) { // It's an experience
+                document.querySelector(`[name="exp-${itemIndex}-name"]`).value = suggestion.experience_name;
+                document.querySelector(`[name="exp-${itemIndex}-start"]`).value = suggestion.start_year || '';
+                document.querySelector(`[name="exp-${itemIndex}-end"]`).value = suggestion.end_year || '';
+                document.querySelector(`[name="exp-${itemIndex}-ongoing"]`).checked = suggestion.ongoing || false;
+                document.querySelector(`#exp-${itemIndex}-id`).value = suggestion.id;
+            }
+        }
+        
+        suggestionsContainer.innerHTML = '';
+        currentSuggestions = [];
+        activeSuggestionIndex = -1;
+    }
+
+    function handleKeydown(event, elementName) {
+        const suggestionsContainer = document.getElementById(`${elementName}-suggestions`);
+        if (!suggestionsContainer || suggestionsContainer.children.length === 0) {
+            // Handle Cmd/Ctrl+Backspace for deletion even without suggestions
+            if ((event.metaKey && event.key === 'Backspace') || (event.ctrlKey && event.key === 'Backspace')) {
+                const input = document.querySelector(`[name="${elementName}"]`);
+                if (input && input.closest('.bullet-point-input')) {
+                    event.preventDefault();
+                    input.closest('.bullet-point-input').remove();
+                }
+            }
+            return;
+        };
+
+        if (event.key === 'ArrowDown') {
+            event.preventDefault(); // prevent cursor from moving
+            activeSuggestionIndex = (activeSuggestionIndex + 1) % currentSuggestions.length;
+            updateActiveSuggestion(suggestionsContainer);
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault(); // prevent cursor from moving
+            activeSuggestionIndex = (activeSuggestionIndex - 1 + currentSuggestions.length) % currentSuggestions.length;
+            updateActiveSuggestion(suggestionsContainer);
+        } else if (event.key === 'Enter') {
+            event.preventDefault();
+            if (activeSuggestionIndex > -1) {
+                selectSuggestion(activeSuggestionIndex, elementName);
+            }
+        } else if ((event.metaKey && event.key === 'Backspace') || (event.ctrlKey && event.key === 'Backspace')) {
+            const input = document.querySelector(`[name="${elementName}"]`);
+            if (input && input.closest('.bullet-point-input')) {
+                event.preventDefault();
+                input.closest('.bullet-point-input').remove();
+            }
+        }
+    }
+
+    function updateActiveSuggestion(container) {
+        for (let i = 0; i < container.children.length; i++) {
+            container.children[i].classList.remove('active');
+        }
+        if (activeSuggestionIndex > -1) {
+            const activeElement = container.children[activeSuggestionIndex];
+            activeElement.classList.add('active');
+            activeElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    }
+
+    document.addEventListener('click', (e) => {
+        const activeSuggestionsContainers = document.querySelectorAll('.autocomplete-suggestions');
+        activeSuggestionsContainers.forEach(container => {
+            if (container && !container.contains(e.target) && !e.target.hasAttribute('onfocus')) {
+                container.innerHTML = '';
+            }
+        });
+    });
+
 
     function importJSON(event) {
       const file = event.target.files[0];

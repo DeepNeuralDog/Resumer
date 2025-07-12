@@ -9,7 +9,8 @@ __pycache__
 *.pyo
 *.pyd
 .Python
-env
+*.db
+.env
 .tox
 .coverage
 .coverage.*
