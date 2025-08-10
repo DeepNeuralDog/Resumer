@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage Personal Info - Resumer</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0; padding: 20px; }
+    .container { max-width: 900px; margin: 20px auto; background: #fff; padding: 32px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h1 { color: #333; }
+    a { color: #007bff; text-decoration: none; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 16px; margin-bottom: 24px; }
+    .btn { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
+    .btn-primary { background-color: #007bff; }
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+    .form-group input { width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+    .message { margin-top: 8px; }
+    .success { color: #28a745; }
+    .error { color: #e74c3c; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Manage Personal Info</h1>
+      <a href="/">&larr; Back to Dashboard</a>
+    </div>
+
+    <form id="personal-info-form">
+      <div class="form-group">
+        <label for="name">Full Name</label>
+        <input type="text" id="name" required>
+      </div>
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" required>
+      </div>
+      <div class="form-group">
+        <label for="phone">Phone Number</label>
+        <input type="tel" id="phone">
+      </div>
+      <div class="form-group">
+        <label for="location">Location</label>
+        <input type="text" id="location">
+      </div>
+      <div class="form-group">
+        <label for="linkedin">LinkedIn Profile URL</label>
+        <input type="url" id="linkedin">
+      </div>
+      <div class="form-group">
+        <label for="github">GitHub Profile URL</label>
+        <input type="url" id="github">
+      </div>
+      <div class="form-group">
+        <label for="website">Personal Website URL</label>
+        <input type="url" id="website">
+      </div>
+       <div class="form-group">
+        <label for="password">New Password (leave blank to keep current)</label>
+        <input type="password" id="password">
+      </div>
+      <div id="message-div" class="message"></div>
+      <button type="submit" class="btn btn-primary">Save Changes</button>
+    </form>
+  </div>
+
+  <script>
+    const API_URL = '/api/user-profile';
+    const form = document.getElementById('personal-info-form');
+    const messageDiv = document.getElementById('message-div');
+
+    async function fetchProfile() {
+      try {
+        const response = await fetch(API_URL);
+        if (!response.ok) {
+            if(response.status === 401) window.location.href = '/login';
+            throw new Error('Failed to fetch profile');
+        }
+        const profile = await response.json();
+        document.getElementById('name').value = profile.name || '';
+        document.getElementById('email').value = profile.email || '';
+        document.getElementById('phone').value = profile.phone || '';
+        document.getElementById('location').value = profile.location || '';
+        document.getElementById('linkedin').value = profile.linkedin || '';
+        document.getElementById('github').value = profile.github || '';
+        document.getElementById('website').value = profile.website || '';
+      } catch (error) {
+        console.error(error);
+        messageDiv.textContent = error.message;
+        messageDiv.className = 'message error';
+      }
+    }
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        messageDiv.textContent = '';
+        
+        const profileData = {
+            name: document.getElementById('name').value,
+            email: document.getElementById('email').value,
+            phone: document.getElementById('phone').value,
+            location: document.getElementById('location').value,
+            linkedin: document.getElementById('linkedin').value,
+            github: document.getElementById('github').value,
+            website: document.getElementById('website').value,
+            password: document.getElementById('password').value
+        };
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(profileData)
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Failed to save profile');
+            }
+            messageDiv.textContent = 'Profile updated successfully!';
+            messageDiv.className = 'message success';
+            document.getElementById('password').value = ''; // Clear password field
+        } catch (error) {
+            console.error(error);
+            messageDiv.textContent = error.message;
+            messageDiv.className = 'message error';
+        }
+    });
+
+    window.onload = fetchProfile;
+  </script>
+</body>
+</html>

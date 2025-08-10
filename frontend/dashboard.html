@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Resumer</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .container { max-width: 800px; width: 100%; margin: 40px; background: #fff; padding: 32px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h1, h2 { text-align: center; color: #333; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 16px; margin-bottom: 24px; }
+    .header h1 { margin: 0; font-size: 1.5em; }
+    .logout-btn { padding: 8px 16px; border: none; background: #e74c3c; color: #fff; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 0.9em; }
+    .main-actions { text-align: center; margin: 32px 0; }
+    .build-btn { padding: 15px 30px; border: none; background: #007bff; color: white; border-radius: 5px; cursor: pointer; font-size: 1.1em; text-decoration: none; transition: background-color 0.2s; }
+    .build-btn:hover { background: #0056b3; }
+    .manage-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+    .section-card { background: #f9f9f9; padding: 20px; border-radius: 8px; text-align: center; border: 1px solid #e0e0e0; transition: transform 0.2s, box-shadow 0.2s; }
+    .section-card:hover { transform: translateY(-5px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .section-card h3 { margin-top: 0; color: #555; }
+    .section-card a { text-decoration: none; color: #007bff; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 id="welcome-message">Welcome!</h1>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+
+    <div class="main-actions">
+      <h2>Ready to create your resume?</h2>
+      <a href="/generate" class="build-btn">Build a New Resume</a>
+    </div>
+
+    <h2>Or, Manage Your Saved Information</h2>
+    <div class="manage-sections">
+      <div class="section-card">
+        <h3>Personal Info</h3>
+        <a href="/manage/personal-info">View/Modify</a>
+      </div>
+      <div class="section-card">
+        <h3>Summaries</h3>
+        <a href="/manage/summaries">View/Modify</a>
+      </div>
+      <div class="section-card">
+        <h3>Skills</h3>
+        <a href="/manage/skills">View/Modify</a>
+      </div>
+      <div class="section-card">
+        <h3>Experience</h3>
+        <a href="/manage/experience">View/Modify</a>
+      </div>
+      <div class="section-card">
+        <h3>Projects</h3>
+        <a href="/manage/projects">View/Modify</a>
+      </div>
+      <div class="section-card">
+        <h3>Education</h3>
+        <a href="/manage/education">View/Modify</a>
+      </div>
+      <div class="section-card">
+        <h3>References</h3>
+        <a href="/manage/references">View/Modify</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function fetchUserProfile() {
+      try {
+        const response = await fetch('/api/user-profile');
+        if (response.ok) {
+          const user = await response.json();
+          document.getElementById('welcome-message').textContent = `Welcome, ${user.name}!`;
+        } else {
+           // If token is invalid/expired, redirect to login
+           if(response.status === 401) window.location.href = '/login';
+        }
+      } catch (error) {
+        console.error('Failed to fetch user profile:', error);
+      }
+    }
+
+    function logout() {
+      fetch('/api/logout')
+        .then(() => {
+          window.location.href = '/login';
+        })
+        .catch(err => {
+          console.error('Logout failed', err);
+        });
+    }
+
+    window.onload = fetchUserProfile;
+  </script>
+</body>
+</html>
