@@ -1,4 +1,4 @@
-FROM python:3.12-slim-bookworm
+FROM python:3.10-slim-bookworm
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -18,6 +18,8 @@ RUN git clone https://github.com/typst/typst.git /tmp/typst \
     && cargo build --release \
     && cp target/release/typst /usr/local/bin/ \
     && rm -rf /tmp/typst
+
+RUN echo "Typst build complete"
 
 WORKDIR /app
 
