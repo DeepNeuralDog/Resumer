@@ -61,7 +61,7 @@
   </div>
 
   <script>
-    const API_URL = '/api/skills_with_bullets';
+    const API_URL = '/api/skills';
     const form = document.getElementById('skill-form');
     const formTitle = document.getElementById('form-title');
     const skillIdInput = document.getElementById('skill-id');
@@ -93,7 +93,7 @@
                 <h3>${skill.skill_name}</h3>
                 <ul>${bulletsHtml || 'No details provided.'}</ul>
                 <div class="skill-actions">
-                  <button class="btn btn-secondary" onclick='editSkill(${skill.id}, "${skill.skill_name}", \`${skill.bullet_points.join('\\n')}\`)'>Edit</button>
+                  <button class="btn btn-secondary" onclick='editSkill(${JSON.stringify(skill)})'>Edit</button>
                   <button class="btn btn-danger" onclick="deleteSkill(${skill.id})">Delete</button>
                 </div>
               `;
@@ -106,11 +106,11 @@
       }
     }
 
-    function editSkill(id, name, bullets) {
+    function editSkill(skill) {
       formTitle.textContent = 'Edit Skill';
-      skillIdInput.value = id;
-      skillNameInput.value = name;
-      skillBulletsInput.value = bullets;
+      skillIdInput.value = skill.id;
+      skillNameInput.value = skill.skill_name;
+      skillBulletsInput.value = skill.bullet_points.join('\n');
       errorDiv.textContent = '';
       document.getElementById('add-skill-form-container').scrollIntoView({ behavior: 'smooth' });
       skillNameInput.focus();
@@ -158,7 +158,7 @@
 
         try {
             const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
-            if (!response.ok) {
+            if (!response.ok && response.status !== 204) {
                 const errorData = await response.json();
                 throw new Error(errorData.detail || 'Failed to delete skill');
             }

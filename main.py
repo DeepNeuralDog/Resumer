@@ -656,6 +656,18 @@ async def manage_summaries_page(request: Request):
 
 
 
+# @app.get("/api/skills")
+# async def get_skills(
+#     q: Optional[str] = None, 
+#     user: db.User = Depends(get_current_user),
+#     db_session: Session = Depends(get_db)
+# ):
+#     query = db_session.query(db.Skill).filter(db.Skill.user_id == user.id)
+#     if q:
+#         query = query.filter(db.Skill.skill_name.ilike(f"%{q}%"))
+#     skills = query.all()
+#     return [{"id": s.id, "skill_name": s.skill_name} for s in skills]
+
 @app.get("/api/skills")
 async def get_skills(
     q: Optional[str] = None, 
@@ -665,8 +677,12 @@ async def get_skills(
     query = db_session.query(db.Skill).filter(db.Skill.user_id == user.id)
     if q:
         query = query.filter(db.Skill.skill_name.ilike(f"%{q}%"))
-    skills = query.all()
-    return [{"id": s.id, "skill_name": s.skill_name} for s in skills]
+    skills = query.order_by(db.Skill.id.desc()).all()
+    return [{
+        "id": s.id, 
+        "skill_name": s.skill_name,
+        "bullet_points": [b.text for b in s.bullet_points]
+    } for s in skills]
 
 @app.get("/api/skills_with_bullets")
 async def get_skills(
