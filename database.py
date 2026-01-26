@@ -1,117 +1,150 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey, Table, Boolean, UniqueConstraint, DateTime
-from sqlalchemy.orm import sessionmaker, relationship
-from sqlalchemy.ext.declarative import declarative_base
-from datetime import datetime
-
-# DATABASE_URL = "sqlite:///./resume.db"
-DATABASE_URL = "sqlite:///./data/resume.db"
-
-engine = create_engine(
-    DATABASE_URL, connect_args={"check_same_thread": False}
+from piccolo.engine.postgres import PostgresEngine
+from piccolo.table import Table, create_tables
+from piccolo.columns import (
+    Serial, Varchar, Text, Boolean, ForeignKey, Timestamptz
 )
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+from dotenv import load_dotenv
+import os
+import datetime
 
-Base = declarative_base()
+load_dotenv()
 
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    email = Column(String, nullable=False, unique=True)
-    password_hash = Column(String, nullable=False)
-    phone = Column(String, nullable=True)
-    location = Column(String, nullable=True)
-    linkedin = Column(String, nullable=True)
-    github = Column(String, nullable=True)
-    website = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.now)
+DB_HOST = os.getenv("PGHOST", "airadev-db.postgres.database.azure.com")
+DB_NAME = os.getenv("PGDATABASE", "postgres")
+DB_USER = os.getenv("PGUSER", "aira_pg_admin")
+DB_PASSWORD = os.getenv("PGPASSWORD", "Shoktishali007")
+DB_PORT = os.getenv("PGPORT", "5432")
 
-class Skill(Base):
-    __tablename__ = "skills"
-    id = Column(Integer, primary_key=True, index=True)
-    skill_name = Column(String, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    bullet_points = relationship("SkillBullet", back_populates="skill", cascade="all, delete-orphan")
-    user = relationship("User")
-    __table_args__ = (UniqueConstraint('skill_name', 'user_id', name='_skill_user_uc'),)
+engine = PostgresEngine(
+    config={
+        "host": DB_HOST,
+        "database": DB_NAME,
+        "user": DB_USER,
+        "password": DB_PASSWORD,
+        "port": int(DB_PORT),
+    },
+    extensions=[]
+)
 
-class SkillBullet(Base):
-    __tablename__ = "skill_bullets"
-    id = Column(Integer, primary_key=True, index=True)
-    text = Column(String)
-    skill_id = Column(Integer, ForeignKey("skills.id"))
-    skill = relationship("Skill", back_populates="bullet_points")
-    __table_args__ = (UniqueConstraint('text', 'skill_id', name='_text_skill_uc'),)
 
-class Experience(Base):
-    __tablename__ = "experiences"
-    id = Column(Integer, primary_key=True, index=True)
-    experience_name = Column(String, index=True)
-    start_year = Column(String, nullable=True)
-    end_year = Column(String, nullable=True)
-    ongoing = Column(Boolean, default=False)
-    bullet_points = relationship("ExperienceBullet", back_populates="experience", cascade="all, delete-orphan")
-    user_id = Column(Integer, ForeignKey("users.id"))
-    user = relationship("User")
-    __table_args__ = (UniqueConstraint('experience_name', 'start_year', 'end_year', 'ongoing', 'user_id', name='_exp_uc'),)
 
-class ExperienceBullet(Base):
-    __tablename__ = "experience_bullets"
-    id = Column(Integer, primary_key=True, index=True)
-    text = Column(String)
-    experience_id = Column(Integer, ForeignKey("experiences.id"))
-    experience = relationship("Experience", back_populates="bullet_points")
-    __table_args__ = (UniqueConstraint('text', 'experience_id', name='_text_exp_uc'),)
+class User(Table, db=engine, tablename="users"):
+    id = Serial(primary_key=True)
+    name = Varchar(length=255, null=False)
+    email = Varchar(length=255, null=False, unique=True)
+    password_hash = Varchar(length=255, null=False)
+    phone = Varchar(length=50, null=True)
+    location = Varchar(length=255, null=True)
+    linkedin = Varchar(length=255, null=True)
+    github = Varchar(length=255, null=True)
+    website = Varchar(length=255, null=True)
+    created_at = Timestamptz(default=datetime.datetime.now)
 
-class Project(Base):
-    __tablename__ = "projects"
-    id = Column(Integer, primary_key=True, index=True)
-    project_name = Column(String, index=True)
-    github_link = Column(String, nullable=True)
-    bullet_points = relationship("ProjectBullet", back_populates="project", cascade="all, delete-orphan")
-    user_id = Column(Integer, ForeignKey("users.id"))
-    user = relationship("User")
-    __table_args__ = (UniqueConstraint('project_name', 'github_link', 'user_id', name='_proj_uc'),)
 
-class ProjectBullet(Base):
-    __tablename__ = "project_bullets"
-    id = Column(Integer, primary_key=True, index=True)
-    text = Column(String)
-    project_id = Column(Integer, ForeignKey("projects.id"))
-    project = relationship("Project", back_populates="bullet_points")
-    __table_args__ = (UniqueConstraint('text', 'project_id', name='_text_proj_uc'),)
+class Skill(Table, db=engine, tablename="skills"):
+    id = Serial(primary_key=True)
+    skill_name = Varchar(length=255, null=False)
+    user = ForeignKey(User)
 
-class Education(Base):
-    __tablename__ = "education"
-    id = Column(Integer, primary_key=True, index=True)
-    education_name = Column(String)
-    institution = Column(String)
-    start = Column(String, nullable=True)
-    end = Column(String, nullable=True)
-    grade = Column(String, nullable=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    user = relationship("User")
-    __table_args__ = (UniqueConstraint('education_name', 'institution', 'start', 'end', 'grade', 'user_id', name='_edu_uc'),)
+    class Meta:
+        unique_together = [("skill_name", "user")]
 
-class Reference(Base):
-    __tablename__ = "references"
-    id = Column(Integer, primary_key=True, index=True)
-    referer_name = Column(String)
-    referer_institute = Column(String)
-    position = Column(String, nullable=True)
-    connection_type = Column(String, nullable=True)
-    institution_url = Column(String, nullable=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    user = relationship("User")
-    __table_args__ = (UniqueConstraint('referer_name', 'referer_institute', 'position', 'user_id', name='_ref_uc'),)
 
-class Summary(Base):
-    __tablename__ = "summaries"
-    id = Column(Integer, primary_key=True, index=True)
-    text = Column(Text)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    user = relationship("User")
-    __table_args__ = (UniqueConstraint('text', 'user_id', name='_summary_user_uc'),)
+class SkillBullet(Table, db=engine, tablename="skill_bullets"):
+    id = Serial(primary_key=True)
+    text = Varchar(length=1024, null=False)
+    skill = ForeignKey(Skill)
+
+    class Meta:
+        unique_together = [("text", "skill")]
+
+
+class Experience(Table, db=engine, tablename="experiences"):
+    id = Serial(primary_key=True)
+    experience_name = Varchar(length=255, null=False)
+    start_year = Varchar(length=20, null=True)
+    end_year = Varchar(length=20, null=True)
+    ongoing = Boolean(default=False)
+    user = ForeignKey(User)
+
+    class Meta:
+        unique_together = [("experience_name", "start_year", "end_year", "ongoing", "user")]
+
+
+class ExperienceBullet(Table, db=engine, tablename="experience_bullets"):
+    id = Serial(primary_key=True)
+    text = Varchar(length=1024, null=False)
+    experience = ForeignKey(Experience)
+
+    class Meta:
+        unique_together = [("text", "experience")]
+
+
+class Project(Table, db=engine, tablename="projects"):
+    id = Serial(primary_key=True)
+    project_name = Varchar(length=255, null=False)
+    github_link = Varchar(length=255, null=True)
+    user = ForeignKey(User)
+
+    class Meta:
+        unique_together = [("project_name", "github_link", "user")]
+
+
+class ProjectBullet(Table, db=engine, tablename="project_bullets"):
+    id = Serial(primary_key=True)
+    text = Varchar(length=1024, null=False)
+    project = ForeignKey(Project)
+
+    class Meta:
+        unique_together = [("text", "project")]
+
+
+class Education(Table, db=engine, tablename="education"):
+    id = Serial(primary_key=True)
+    education_name = Varchar(length=255, null=False)
+    institution = Varchar(length=255, null=False)
+    start = Varchar(length=50, null=True)
+    end = Varchar(length=50, null=True)
+    grade = Varchar(length=50, null=True)
+    user = ForeignKey(User)
+
+    class Meta:
+        unique_together = [("education_name", "institution", "start", "end", "grade", "user")]
+
+
+class Reference(Table, db=engine, tablename="references"):
+    id = Serial(primary_key=True)
+    referer_name = Varchar(length=255, null=False)
+    referer_institute = Varchar(length=255, null=False)
+    position = Varchar(length=255, null=True)
+    connection_type = Varchar(length=255, null=True)
+    institution_url = Varchar(length=255, null=True)
+    user = ForeignKey(User)
+
+    class Meta:
+        unique_together = [("referer_name", "referer_institute", "position", "user")]
+
+
+class Summary(Table, db=engine, tablename="summaries"):
+    id = Serial(primary_key=True)
+    text = Text(null=False)
+    user = ForeignKey(User)
+
+    class Meta:
+        unique_together = [("text", "user")]
+
 
 def create_db_and_tables():
-    Base.metadata.create_all(bind=engine)
+    create_tables(
+        User,
+        Skill,
+        SkillBullet,
+        Experience,
+        ExperienceBullet,
+        Project,
+        ProjectBullet,
+        Education,
+        Reference,
+        Summary,
+        if_not_exists=True,
+    )

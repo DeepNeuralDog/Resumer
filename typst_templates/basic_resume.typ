@@ -136,9 +136,9 @@
 #if skills_list.len() > 0 {
   section_title("Skills")
   grid(
-    columns: (1fr, 1fr), // Two equal columns
-    gutter: 0.4cm,      // Space between columns
-    ..skills_list.map(skill_item => block[ // Use .map to transform each skill into a block
+    columns: (1fr, 1fr),
+    gutter: 0.4cm, 
+    ..skills_list.map(skill_item => block[
       #text(size:11pt, weight: "bold")[#element_title #skill_item.skill_name]
       #v(0.0em)
       #for point in skill_item.bullet_points {
@@ -154,8 +154,18 @@
   section_title("Experience")
   for exp_item in experience_list {
     text(weight: "semibold")[#element_title #exp_item.experience_name]
-    if exp_item.years != none {
-      text(size: 9pt)[ (#exp_item.years)]
+    let details_content = [] 
+    if exp_item.start_year != none {
+      details_content = details_content + exp_item.start_year + " - "
+    }
+    if exp_item.end_year != none {
+      details_content = details_content + exp_item.end_year
+    }
+    if exp_item.end_year == none {
+      details_content = details_content + "Present"
+    }
+    if details_content != [] { // Check if any content was actually added
+      text(size: 9pt)[ (#details_content)]
     }
     v(0.0em)
     for point in exp_item.bullet_points {
@@ -190,7 +200,13 @@
     text(weight: 550)[#string_space #edu_item.institution]
     let details_content = [] // Initialize as empty content
     if edu_item.start != none {
-      details_content = details_content + edu_item.start + " - " + (if edu_item.end != none { edu_item.end } else { "Present" })
+      details_content = details_content + edu_item.start + " - " 
+    }
+    if edu_item.end != none {
+      details_content = details_content + edu_item.end
+    }
+    if edu_item.end == none {
+      details_content = details_content + "Present"
     }
     if details_content != [] { // Check if any content was actually added
       text(size: 9pt)[ (#details_content)]

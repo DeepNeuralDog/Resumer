@@ -174,6 +174,39 @@
   </div>
   <script>
 
+    async function preloadUserProfile() {
+      try {
+        const res = await fetch('/api/user-profile');
+        if (!res.ok) return;
+        const profile = await res.json();
+
+        const form = document.getElementById('resume-form');
+        form.name.value = profile.name || '';
+        form.email.value = profile.email || '';
+        form.phone.value = profile.phone || '';
+        form.location.value = profile.location || '';
+        form.linkedin.value = profile.linkedin || '';
+        form.github.value = profile.github || '';
+        form.website.value = profile.website || '';
+      } catch (err) {
+        console.error('Failed to preload user profile', err);
+      }
+    }
+
+    async function preloadEducations() {
+      try {
+        const res = await fetch('/api/educations');
+        if (!res.ok) return;
+        const educations = await res.json();
+
+        document.getElementById('education-section').innerHTML = '';
+        eduCount = 0;
+        (educations || []).forEach(addEducation);
+      } catch (err) {
+        console.error('Failed to preload educations', err);
+      }
+    }
+
     function logout() {
       fetch('/api/logout')
         .then(() => {
@@ -697,6 +730,8 @@
 
     window.onload = function() {
       loadTemplates();
+      preloadUserProfile();
+      preloadEducations();
     }
   </script>
 </body>

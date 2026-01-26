@@ -1,11 +1,10 @@
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, RedirectResponse
-from fastapi import FastAPI, Request, Depends, HTTPException, status, Cookie
+from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from tempfile import NamedTemporaryFile
 from typing import List, Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from PIL import Image
 import os
 import shutil
@@ -13,11 +12,8 @@ import jinja2
 import base64
 import io
 import subprocess
-import traceback
-from sqlalchemy.orm import Session
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 import database as db
-from sqlalchemy import or_
+from database import engine, create_db_and_tables
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
@@ -29,20 +25,21 @@ app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-db.create_db_and_tables()
 
+@app.on_event("startup")
+async def on_startup():
+    create_db_and_tables()
+    await engine.start_connection_pool()
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    await engine.close_connection_pool()
+    
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 SECRET_KEY = os.environ.get("SECRET_KEY")
 ALGORITHM = os.environ.get("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES"))
-
-def get_db():
-    database = db.SessionLocal()
-    try:
-        yield database
-    finally:
-        database.close()
 
 app.add_middleware(
     CORSMiddleware,
@@ -53,6 +50,7 @@ app.add_middleware(
 )
 
 TEMPLATE_DIR = "typst_templates"
+
 
 # User models
 class UserCreate(BaseModel):
@@ -65,17 +63,21 @@ class UserCreate(BaseModel):
     github: Optional[str] = None
     website: Optional[str] = None
 
+
 class UserLogin(BaseModel):
     email: str
     password: str
+
 
 class Token(BaseModel):
     access_token: str
     token_type: str
 
+
 class TokenData(BaseModel):
     email: Optional[str] = None
     user_id: Optional[int] = None
+
 
 class Contact(BaseModel):
     email: Optional[str] = None
@@ -85,24 +87,28 @@ class Contact(BaseModel):
     github: Optional[str] = None
     website: Optional[str] = None
 
+
 class SummaryModel(BaseModel):
     text: str
+
 
 class Skill(BaseModel):
     skill_name: str
     bullet_points: List[str]
+
 
 class Experience(BaseModel):
     experience_name: str
     bullet_points: List[str]
     start_year: Optional[str] = None
     end_year: Optional[str] = None
-    ongoing: Optional[bool] = False
+
 
 class Project(BaseModel):
     project_name: str
     bullet_points: List[str]
     github_link: Optional[str] = None
+
 
 class Education(BaseModel):
     education_name: str
@@ -111,12 +117,14 @@ class Education(BaseModel):
     end: Optional[str] = None
     grade: Optional[str] = None
 
+
 class Reference(BaseModel):
     referer_name: str
     referer_institute: str
     position: Optional[str] = None
     connection_type: Optional[str] = None
     institution_url: Optional[str] = None
+
 
 class ResumeData(BaseModel):
     name: str
@@ -129,12 +137,14 @@ class ResumeData(BaseModel):
     education: List[Education]
     references: List[Reference]
 
-# Authentication functions
+
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
+
 def get_password_hash(password):
     return pwd_context.hash(password)
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -146,45 +156,54 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def authenticate_user(db_session, email: str, password: str):
-    user = db_session.query(db.User).filter(db.User.email == email).first()
+
+async def fetch_one(query):
+    rows = await query.run()
+    return rows[0] if rows else None
+
+
+async def authenticate_user(email: str, password: str):
+    user = await fetch_one(
+        db.User.select().where(db.User.email == email)
+    )
     if not user:
         return False
-    if not verify_password(password, user.password_hash):
+    if not verify_password(password, user["password_hash"]):
         return False
     return user
 
-async def get_current_user(request: Request, db_session: Session = Depends(get_db)):
+
+async def get_current_user(request: Request):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
-    # Try to get token from cookie
+
     token = request.cookies.get("access_token")
     if not token:
-        # Try to get token from Authorization header
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split("Bearer ")[1]
         else:
             raise credentials_exception
-    
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         user_id: int = payload.get("user_id")
         if email is None or user_id is None:
             raise credentials_exception
-        token_data = TokenData(email=email, user_id=user_id)
     except JWTError:
         raise credentials_exception
-    
-    user = db_session.query(db.User).filter(db.User.id == user_id).first()
+
+    user = await fetch_one(
+        db.User.select().where(db.User.id == user_id)
+    )
     if user is None:
         raise credentials_exception
     return user
+
 
 def py_to_typst(val):
     if isinstance(val, str):
@@ -206,150 +225,228 @@ def py_to_typst(val):
             return f'({items_str})'
     elif isinstance(val, dict):
         if not val:
-            return '(:)' 
+            return '(:)'
         return '(' + ', '.join(f'{k}: {py_to_typst(v)}' for k, v in val.items()) + ')'
     else:
         return 'none'
-
-def save_resume_data(data: ResumeData, db_session: Session, user_id: int):
-    # Save summary
+async def save_resume_data(data: ResumeData, user_id: int):
     if data.summary and data.summary.strip():
-        stmt = sqlite_insert(db.Summary).values(text=data.summary, user_id=user_id).on_conflict_do_nothing()
-        db_session.execute(stmt)
+        existing_summary = await fetch_one(
+            db.Summary.select().where(
+                (db.Summary.text == data.summary) &
+                (db.Summary.user == user_id)
+            )
+        )
+        if not existing_summary:
+            await db.Summary.insert(
+                db.Summary(text=data.summary, user=user_id)
+            ).run()
 
-    # Save skills and bullets
     for skill_data in data.skills:
         if skill_data.skill_name and skill_data.skill_name.strip():
-            # Insert skill
-            skill_stmt = sqlite_insert(db.Skill).values(
-                skill_name=skill_data.skill_name,
-                user_id=user_id
-            ).on_conflict_do_nothing()
-            db_session.execute(skill_stmt)
-            db_session.commit()
-            
-            skill = db_session.query(db.Skill).filter_by(
-                skill_name=skill_data.skill_name,
-                user_id=user_id
-            ).first()
+            existing_skill = await fetch_one(
+                db.Skill.select().where(
+                    (db.Skill.skill_name == skill_data.skill_name) &
+                    (db.Skill.user == user_id)
+                )
+            )
+            if not existing_skill:
+                await db.Skill.insert(
+                    db.Skill(skill_name=skill_data.skill_name, user=user_id)
+                ).run()
+
+            skill = await fetch_one(
+                db.Skill.select().where(
+                    (db.Skill.skill_name == skill_data.skill_name) &
+                    (db.Skill.user == user_id)
+                )
+            )
 
             if skill:
                 for point in skill_data.bullet_points:
                     if point and point.strip():
-                        bullet_stmt = sqlite_insert(db.SkillBullet).values(
-                            text=point, 
-                            skill_id=skill.id
-                        ).on_conflict_do_nothing()
-                        db_session.execute(bullet_stmt)
+                        existing_bullet = await fetch_one(
+                            db.SkillBullet.select().where(
+                                (db.SkillBullet.text == point) &
+                                (db.SkillBullet.skill == skill["id"])
+                            )
+                        )
+                        if not existing_bullet:
+                            await db.SkillBullet.insert(
+                                db.SkillBullet(text=point, skill=skill["id"])
+                            ).run()
 
-    # Save experiences and bullets
     for exp_data in data.experience:
         if exp_data.experience_name and exp_data.experience_name.strip():
-            exp_values = exp_data.dict(exclude={'bullet_points'})
-            exp_values['user_id'] = user_id
-            exp_stmt = sqlite_insert(db.Experience).values(**exp_values).on_conflict_do_nothing()
-            db_session.execute(exp_stmt)
-            db_session.commit()
+            existing_exp = await fetch_one(
+                db.Experience.select().where(
+                    (db.Experience.experience_name == exp_data.experience_name) &
+                    (db.Experience.start_year == exp_data.start_year) &
+                    (db.Experience.end_year == exp_data.end_year) &
+                    (db.Experience.user == user_id)
+                )
+            )
+            if not existing_exp:
+                await db.Experience.insert(
+                    db.Experience(
+                        experience_name=exp_data.experience_name,
+                        start_year=exp_data.start_year,
+                        end_year=exp_data.end_year,
+                        user=user_id
+                    )
+                ).run()
 
-            exp = db_session.query(db.Experience).filter_by(
-                experience_name=exp_data.experience_name, 
-                start_year=exp_data.start_year, 
-                end_year=exp_data.end_year, 
-                ongoing=exp_data.ongoing,
-                user_id=user_id
-            ).first()
-            
+            exp = await fetch_one(
+                db.Experience.select().where(
+                    (db.Experience.experience_name == exp_data.experience_name) &
+                    (db.Experience.start_year == exp_data.start_year) &
+                    (db.Experience.end_year == exp_data.end_year) &
+                    (db.Experience.user == user_id)
+                )
+            )
+
             if exp:
                 for point in exp_data.bullet_points:
                     if point and point.strip():
-                        bullet_stmt = sqlite_insert(db.ExperienceBullet).values(
-                            text=point, 
-                            experience_id=exp.id
-                        ).on_conflict_do_nothing()
-                        db_session.execute(bullet_stmt)
+                        existing_bullet = await fetch_one(
+                            db.ExperienceBullet.select().where(
+                                (db.ExperienceBullet.text == point) &
+                                (db.ExperienceBullet.experience == exp["id"])
+                            )
+                        )
+                        if not existing_bullet:
+                            await db.ExperienceBullet.insert(
+                                db.ExperienceBullet(text=point, experience=exp["id"])
+                            ).run()
 
-    # Save projects and bullets
     for proj_data in data.projects:
         if proj_data.project_name and proj_data.project_name.strip():
-            proj_values = proj_data.dict(exclude={'bullet_points'})
-            proj_values['user_id'] = user_id
-            proj_stmt = sqlite_insert(db.Project).values(**proj_values).on_conflict_do_nothing()
-            db_session.execute(proj_stmt)
-            db_session.commit()
+            existing_proj = await fetch_one(
+                db.Project.select().where(
+                    (db.Project.project_name == proj_data.project_name) &
+                    (db.Project.github_link == proj_data.github_link) &
+                    (db.Project.user == user_id)
+                )
+            )
+            if not existing_proj:
+                await db.Project.insert(
+                    db.Project(
+                        project_name=proj_data.project_name,
+                        github_link=proj_data.github_link,
+                        user=user_id
+                    )
+                ).run()
 
-            proj = db_session.query(db.Project).filter_by(
-                project_name=proj_data.project_name, 
-                github_link=proj_data.github_link,
-                user_id=user_id
-            ).first()
-            
+            proj = await fetch_one(
+                db.Project.select().where(
+                    (db.Project.project_name == proj_data.project_name) &
+                    (db.Project.github_link == proj_data.github_link) &
+                    (db.Project.user == user_id)
+                )
+            )
+
             if proj:
                 for point in proj_data.bullet_points:
                     if point and point.strip():
-                        bullet_stmt = sqlite_insert(db.ProjectBullet).values(
-                            text=point, 
-                            project_id=proj.id
-                        ).on_conflict_do_nothing()
-                        db_session.execute(bullet_stmt)
+                        existing_bullet = await fetch_one(
+                            db.ProjectBullet.select().where(
+                                (db.ProjectBullet.text == point) &
+                                (db.ProjectBullet.project == proj["id"])
+                            )
+                        )
+                        if not existing_bullet:
+                            await db.ProjectBullet.insert(
+                                db.ProjectBullet(text=point, project=proj["id"])
+                            ).run()
 
-    # Save education
     for edu_data in data.education:
         if edu_data.education_name and edu_data.education_name.strip():
-            edu_values = edu_data.dict()
-            edu_values['user_id'] = user_id
-            edu_stmt = sqlite_insert(db.Education).values(**edu_values).on_conflict_do_nothing()
-            db_session.execute(edu_stmt)
+            existing_edu = await fetch_one(
+                db.Education.select().where(
+                    (db.Education.education_name == edu_data.education_name) &
+                    (db.Education.institution == edu_data.institution) &
+                    (db.Education.start == edu_data.start) &
+                    (db.Education.end == edu_data.end) &
+                    (db.Education.grade == edu_data.grade) &
+                    (db.Education.user == user_id)
+                )
+            )
+            if not existing_edu:
+                await db.Education.insert(
+                    db.Education(
+                        education_name=edu_data.education_name,
+                        institution=edu_data.institution,
+                        start=edu_data.start,
+                        end=edu_data.end,
+                        grade=edu_data.grade,
+                        user=user_id
+                    )
+                ).run()
 
-    # Save references
     for ref_data in data.references:
         if ref_data.referer_name and ref_data.referer_name.strip():
-            ref_values = ref_data.dict()
-            ref_values['user_id'] = user_id
-            ref_stmt = sqlite_insert(db.Reference).values(**ref_values).on_conflict_do_nothing()
-            db_session.execute(ref_stmt)
+            existing_ref = await fetch_one(
+                db.Reference.select().where(
+                    (db.Reference.referer_name == ref_data.referer_name) &
+                    (db.Reference.referer_institute == ref_data.referer_institute) &
+                    (db.Reference.position == ref_data.position) &
+                    (db.Reference.connection_type == ref_data.connection_type) &
+                    (db.Reference.institution_url == ref_data.institution_url) &
+                    (db.Reference.user == user_id)
+                )
+            )
+            if not existing_ref:
+                await db.Reference.insert(
+                    db.Reference(
+                        referer_name=ref_data.referer_name,
+                        referer_institute=ref_data.referer_institute,
+                        position=ref_data.position,
+                        connection_type=ref_data.connection_type,
+                        institution_url=ref_data.institution_url,
+                        user=user_id
+                    )
+                ).run()
 
-    db_session.commit()
-
-# User registration and login endpoints
 @app.post("/api/register")
-async def register_user(user_data: UserCreate, db_session: Session = Depends(get_db)):
-    db_user = db_session.query(db.User).filter(db.User.email == user_data.email).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    hashed_password = get_password_hash(user_data.password)
-    db_user = db.User(
-        name=user_data.name,
-        email=user_data.email,
-        password_hash=hashed_password,
-        phone=user_data.phone,
-        location=user_data.location,
-        linkedin=user_data.linkedin,
-        github=user_data.github,
-        website=user_data.website
+async def register_user(user_data: UserCreate):
+    existing = await fetch_one(
+        db.User.select().where(db.User.email == user_data.email)
     )
-    
-    db_session.add(db_user)
-    db_session.commit()
-    db_session.refresh(db_user)
-    
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    hashed_password = get_password_hash(user_data.password)
+    await db.User.insert(
+        db.User(
+            name=user_data.name,
+            email=user_data.email,
+            password_hash=hashed_password,
+            phone=user_data.phone,
+            location=user_data.location,
+            linkedin=user_data.linkedin,
+            github=user_data.github,
+            website=user_data.website
+        )
+    ).run()
+
     return {"message": "User registered successfully"}
 
+
 @app.post("/api/login")
-async def login(user_data: UserLogin, db_session: Session = Depends(get_db)):
-    user = authenticate_user(db_session, user_data.email, user_data.password)
+async def login(user_data: UserLogin):
+    user = await authenticate_user(user_data.email, user_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
         )
-    
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.email, "user_id": user.id},
+        data={"sub": user["email"], "user_id": user["id"]},
         expires_delta=access_token_expires
     )
-    
+
     response = JSONResponse({"access_token": access_token, "token_type": "bearer"})
     response.set_cookie(
         key="access_token",
@@ -357,15 +454,17 @@ async def login(user_data: UserLogin, db_session: Session = Depends(get_db)):
         httponly=True,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         samesite="lax",
-        secure=False  # Set to True in production with HTTPS
+        secure=False
     )
     return response
+
 
 @app.get("/api/logout")
 async def logout():
     response = RedirectResponse(url="/login")
     response.delete_cookie(key="access_token")
     return response
+
 
 @app.get("/templates")
 async def list_templates():
@@ -375,15 +474,15 @@ async def list_templates():
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+
 @app.post("/generate-pdf")
 async def generate_pdf(
-    data: ResumeData, 
-    request: Request, 
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    data: ResumeData,
+    request: Request,
+    user: dict = Depends(get_current_user)
 ):
     try:
-        save_resume_data(data, db_session, user.id)
+        await save_resume_data(data, user["id"])
 
         template_name = request.headers.get("X-Template-Name", "resume.typ")
         template_path = os.path.join(TEMPLATE_DIR, template_name)
@@ -410,7 +509,7 @@ async def generate_pdf(
         # Copy icon files to the same directory as the .typ file
         typ_dir = os.path.dirname(typ_file_path)
         icon_files = ["email.png", "phone.png", "linkedin.png", "github.png", "location.png"]
-        
+
         for icon_file in icon_files:
             source_path = os.path.join("static", icon_file)
             dest_path = os.path.join(typ_dir, icon_file)
@@ -419,45 +518,84 @@ async def generate_pdf(
 
         image_typst_path = None
         image_full_path = None
-        
+
         if data.image_base64:
             try:
                 if ',' in data.image_base64:
                     image_data_b64 = data.image_base64.split(',', 1)[1]
                 else:
                     image_data_b64 = data.image_base64
-                
+
                 image_data = base64.b64decode(image_data_b64)
-                
+
                 image = Image.open(io.BytesIO(image_data))
-                
+
                 if image.mode in ('RGBA', 'LA', 'P'):
                     image = image.convert('RGB')
                 elif image.mode != 'RGB':
                     image = image.convert('RGB')
-                
+
                 image_filename = "resume_image.png"
                 image_full_path = os.path.join(typ_dir, image_filename)
-                
+
                 image.save(image_full_path, 'PNG', optimize=True)
-                
+
                 image_typst_path = image_filename
-                
+
             except Exception as e:
                 print(f"Error processing image: {e}")
 
         # Update contact info from user data
         contact_data = {
-            "email": data.contact.email or user.email,
-            "phone": data.contact.phone or user.phone,
-            "location": data.contact.location or user.location,
-            "linkedin": data.contact.linkedin or user.linkedin,
-            "github": data.contact.github or user.github,
-            "website": data.contact.website or user.website
+            "email": data.contact.email or user["email"],
+            "phone": data.contact.phone or user["phone"],
+            "location": data.contact.location or user["location"],
+            "linkedin": data.contact.linkedin or user["linkedin"],
+            "github": data.contact.github or user["github"],
+            "website": data.contact.website or user["website"]
         }
 
+        sanitized_exp : List[Experience] = []
+        sanitized_edu : List[Education] = []
+
+        for exp in data.experience:
+            if exp.end_year == "":
+                print("DHORA PORSE")
+                new_exp = Experience(
+                    experience_name=exp.experience_name,
+                    bullet_points=exp.bullet_points,
+                    start_year=exp.start_year,
+                    end_year="Present"
+                )
+                sanitized_exp.append(new_exp)
+            else:
+                sanitized_exp.append(exp)
+
+        for edu in data.education:
+            if edu.end == "":
+                print("DHORA PORSE")
+                new_edu = Education(
+                    education_name=edu.education_name,
+                    institution=edu.institution,
+                    start=edu.start,
+                    grade=edu.grade,
+                    end="Present",
+                )
+                sanitized_edu.append(new_edu)
+            else:
+                sanitized_edu.append(edu)
+        
+        data.experience = sanitized_exp
+        data.education = sanitized_edu
+
+
+        print("SANITIZED EXPERIENCE:")
+        print(data.experience)
+        print("SANITIZED EDUCATION:")
+        print(data.education)
+
         typst_filled = template.render(
-            name=data.name or user.name,
+            name=data.name or user["name"],
             contact=py_to_typst(contact_data),
             summary=py_to_typst(data.summary),
             image_path=py_to_typst(image_typst_path),
@@ -467,33 +605,31 @@ async def generate_pdf(
             education=py_to_typst([e.dict() for e in data.education]),
             references=py_to_typst([r.dict() for r in data.references])
         )
-        
+
         with open(typ_file_path, "w") as typ_file:
             typ_file.write(typst_filled)
-            
+
         pdf_path = typ_file_path.replace(".typ", ".pdf")
         try:
             subprocess.run(["typst", "compile", typ_file_path, pdf_path], check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
             print("TYPST ERROR OUTPUT:", e.stderr)
-            # Clean up temp files on error
             if image_full_path and os.path.exists(image_full_path):
                 os.unlink(image_full_path)
-            # Clean up icon files
             for icon_file in icon_files:
                 icon_path_to_remove = os.path.join(typ_dir, icon_file)
                 if os.path.exists(icon_path_to_remove):
                     os.unlink(icon_path_to_remove)
             return JSONResponse({"error": e.stderr}, status_code=500)
-        
+
         # Clean up temp files after successful compilation
         if image_full_path and os.path.exists(image_full_path):
             os.unlink(image_full_path)
-        
+
         for icon_file in icon_files:
             icon_path = os.path.join(typ_dir, icon_file)
             if os.path.exists(icon_path):
-                os.unlink(icon_path) 
+                os.unlink(icon_path)
 
         return FileResponse(pdf_path, media_type="application/pdf", filename="resume.pdf")
     except Exception as e:
@@ -501,59 +637,58 @@ async def generate_pdf(
         print("SERVER ERROR:", traceback.format_exc())
         return JSONResponse({"error": str(e)}, status_code=500)
 
+
 @app.post("/save-json")
 async def save_json(
-    data: ResumeData, 
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    data: ResumeData,
+    user: dict = Depends(get_current_user)
 ):
-    save_resume_data(data, db_session, user.id)
+    await save_resume_data(data, user["id"])
     response_data = data.dict()
     response_data["image_base64"] = None if data.image_base64 else None
     return JSONResponse(response_data)
 
 
-
-
-
-
-
-
 @app.get("/api/user-profile")
-async def get_user_profile(user: db.User = Depends(get_current_user)):
+async def get_user_profile(user: dict = Depends(get_current_user)):
     return {
-        "name": user.name,
-        "email": user.email,
-        "phone": user.phone,
-        "location": user.location,
-        "linkedin": user.linkedin,
-        "github": user.github,
-        "website": user.website
+        "name": user["name"],
+        "email": user["email"],
+        "phone": user["phone"],
+        "location": user["location"],
+        "linkedin": user["linkedin"],
+        "github": user["github"],
+        "website": user["website"]
     }
+
 
 @app.put("/api/user-profile")
 async def update_user_profile(
     user_data: UserCreate,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    user.name = user_data.name
-    user.email = user_data.email
-    user.phone = user_data.phone
-    user.location = user_data.location
-    user.linkedin = user_data.linkedin
-    user.github = user_data.github
-    user.website = user_data.website
-    if user_data.password:
-        user.password_hash = get_password_hash(user_data.password)
-    
-    db_session.commit()
-    db_session.refresh(user)
+    await db.User.update({
+        db.User.name: user_data.name,
+        db.User.email: user_data.email,
+        db.User.phone: user_data.phone,
+        db.User.location: user_data.location,
+        db.User.linkedin: user_data.linkedin,
+        db.User.github: user_data.github,
+        db.User.website: user_data.website,
+        db.User.password_hash: get_password_hash(user_data.password) if user_data.password else user["password_hash"]
+    }).where(db.User.id == user["id"]).run()
+
+    updated = await fetch_one(db.User.select().where(db.User.id == user["id"]))
     return {
-        "name": user.name, "email": user.email, "phone": user.phone,
-        "location": user.location, "linkedin": user.linkedin,
-        "github": user.github, "website": user.website
+        "name": updated["name"],
+        "email": updated["email"],
+        "phone": updated["phone"],
+        "location": updated["location"],
+        "linkedin": updated["linkedin"],
+        "github": updated["github"],
+        "website": updated["website"]
     }
+
 
 @app.get("/manage/personal-info", response_class=HTMLResponse)
 async def manage_personal_info_page(request: Request):
@@ -564,76 +699,84 @@ async def manage_personal_info_page(request: Request):
         jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return RedirectResponse(url="/login", status_code=303)
-    
+
     with open("frontend/manage_personal_info.html") as f:
         return HTMLResponse(f.read())
 
 
-
-
-
-
-
-
-
-
-
-
-
 @app.get("/api/summaries")
-async def get_summaries(q: Optional[str] = None, user: db.User = Depends(get_current_user), db_session: Session = Depends(get_db)):
-    query = db_session.query(db.Summary.text).filter(db.Summary.user_id == user.id)
+async def get_summaries(q: Optional[str] = None, user: dict = Depends(get_current_user)):
+    query = db.Summary.select(db.Summary.text).where(db.Summary.user == user["id"])
     if q:
-        query = query.filter(db.Summary.text.ilike(f"%{q}%"))
-    summaries = query.all()
-    return [s[0] for s in summaries]
+        query = query.where(db.Summary.text.ilike(f"%{q}%"))
+    summaries = await query.run()
+    return [s["text"] for s in summaries]
+
 
 @app.get("/api/summaries_with_ids")
-async def get_summaries_with_ids(user: db.User = Depends(get_current_user), db_session: Session = Depends(get_db)):
-    summaries = db_session.query(db.Summary).filter(db.Summary.user_id == user.id).order_by(db.Summary.id.desc()).all()
-    return [{"id": s.id, "text": s.text} for s in summaries]
+async def get_summaries_with_ids(user: dict = Depends(get_current_user)):
+    summaries = await db.Summary.select().where(db.Summary.user == user["id"]).order_by(db.Summary.id, ascending=False).run()
+    return [{"id": s["id"], "text": s["text"]} for s in summaries]
+
 
 @app.post("/api/summaries", status_code=status.HTTP_201_CREATED)
 async def create_summary(
     summary_data: SummaryModel,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    new_summary = db.Summary(text=summary_data.text, user_id=user.id)
-    db_session.add(new_summary)
-    db_session.commit()
-    db_session.refresh(new_summary)
-    return {"id": new_summary.id, "text": new_summary.text}
+    existing = await fetch_one(
+        db.Summary.select().where(
+            (db.Summary.text == summary_data.text) &
+            (db.Summary.user == user["id"])
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Summary already exists.")
+
+    inserted = await db.Summary.insert(
+        db.Summary(text=summary_data.text, user=user["id"])
+    ).returning(db.Summary.id).run()
+    summary_id = inserted[0]["id"]
+    return {"id": summary_id, "text": summary_data.text}
+
 
 @app.put("/api/summaries/{summary_id}")
 async def update_summary(
     summary_id: int,
     summary_data: SummaryModel,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    summary = db_session.query(db.Summary).filter(db.Summary.id == summary_id, db.Summary.user_id == user.id).first()
-    if not summary:
+    existing = await fetch_one(
+        db.Summary.select().where(
+            (db.Summary.id == summary_id) & (db.Summary.user == user["id"])
+        )
+    )
+    if not existing:
         raise HTTPException(status_code=404, detail="Summary not found")
-    
-    summary.text = summary_data.text
-    db_session.commit()
-    db_session.refresh(summary)
-    return {"id": summary.id, "text": summary.text}
+
+    await db.Summary.update({
+        db.Summary.text: summary_data.text
+    }).where(db.Summary.id == summary_id).run()
+
+    return {"id": summary_id, "text": summary_data.text}
+
 
 @app.delete("/api/summaries/{summary_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_summary(
     summary_id: int,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    summary = db_session.query(db.Summary).filter(db.Summary.id == summary_id, db.Summary.user_id == user.id).first()
-    if not summary:
+    existing = await fetch_one(
+        db.Summary.select().where(
+            (db.Summary.id == summary_id) & (db.Summary.user == user["id"])
+        )
+    )
+    if not existing:
         raise HTTPException(status_code=404, detail="Summary not found")
-    
-    db_session.delete(summary)
-    db_session.commit()
+
+    await db.Summary.delete().where(db.Summary.id == summary_id).run()
     return
+
 
 @app.get("/manage/summaries", response_class=HTMLResponse)
 async def manage_summaries_page(request: Request):
@@ -644,152 +787,140 @@ async def manage_summaries_page(request: Request):
         jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return RedirectResponse(url="/login", status_code=303)
-    
+
     with open("frontend/manage_summaries.html") as f:
         return HTMLResponse(f.read())
 
 
-
-
-
-
-
-
-
-# @app.get("/api/skills")
-# async def get_skills(
-#     q: Optional[str] = None, 
-#     user: db.User = Depends(get_current_user),
-#     db_session: Session = Depends(get_db)
-# ):
-#     query = db_session.query(db.Skill).filter(db.Skill.user_id == user.id)
-#     if q:
-#         query = query.filter(db.Skill.skill_name.ilike(f"%{q}%"))
-#     skills = query.all()
-#     return [{"id": s.id, "skill_name": s.skill_name} for s in skills]
-
 @app.get("/api/skills")
 async def get_skills(
-    q: Optional[str] = None, 
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    q: Optional[str] = None,
+    user: dict = Depends(get_current_user)
 ):
-    query = db_session.query(db.Skill).filter(db.Skill.user_id == user.id)
+    query = db.Skill.select().where(db.Skill.user == user["id"])
     if q:
-        query = query.filter(db.Skill.skill_name.ilike(f"%{q}%"))
-    skills = query.order_by(db.Skill.id.desc()).all()
-    return [{
-        "id": s.id, 
-        "skill_name": s.skill_name,
-        "bullet_points": [b.text for b in s.bullet_points]
-    } for s in skills]
+        query = query.where(db.Skill.skill_name.ilike(f"%{q}%"))
+    skills = await query.order_by(db.Skill.id, ascending=False).run()
+
+    results = []
+    for s in skills:
+        bullets = await db.SkillBullet.select(db.SkillBullet.text).where(db.SkillBullet.skill == s["id"]).run()
+        results.append({
+            "id": s["id"],
+            "skill_name": s["skill_name"],
+            "bullet_points": [b["text"] for b in bullets]
+        })
+    return results
+
 
 @app.get("/api/skills_with_bullets")
-async def get_skills(
-    q: Optional[str] = None, 
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+async def get_skills_with_bullets(
+    q: Optional[str] = None,
+    user: dict = Depends(get_current_user)
 ):
-    query = db_session.query(db.Skill).filter(db.Skill.user_id == user.id)
-    if q:
-        query = query.filter(db.Skill.skill_name.ilike(f"%{q}%"))
-    skills = query.order_by(db.Skill.id.desc()).all()
-    return [{
-        "id": s.id, 
-        "skill_name": s.skill_name,
-        "bullet_points": [b.text for b in s.bullet_points]
-    } for s in skills]
+    return await get_skills(q=q, user=user)
+
 
 @app.get("/api/skills/{skill_id}/bullets")
 async def get_skill_bullets(
-    skill_id: int, 
-    q: Optional[str] = None, 
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    skill_id: int,
+    q: Optional[str] = None,
+    user: dict = Depends(get_current_user)
 ):
-    skill = db_session.query(db.Skill).filter(
-        db.Skill.id == skill_id,
-        db.Skill.user_id == user.id
-    ).first()
-    
+    skill = await fetch_one(
+        db.Skill.select().where(
+            (db.Skill.id == skill_id) & (db.Skill.user == user["id"])
+        )
+    )
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
-    
-    query = db_session.query(db.SkillBullet.text).filter(db.SkillBullet.skill_id == skill_id)
+
+    query = db.SkillBullet.select(db.SkillBullet.text).where(db.SkillBullet.skill == skill_id)
     if q:
-        query = query.filter(db.SkillBullet.text.ilike(f"%{q}%"))
-    bullets = query.distinct().all()
-    return [b[0] for b in bullets]
+        query = query.where(db.SkillBullet.text.ilike(f"%{q}%"))
+    bullets = await query.run()
+    return [b["text"] for b in bullets]
 
 
 @app.post("/api/skills", status_code=status.HTTP_201_CREATED)
 async def create_skill(
     skill_data: Skill,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    existing_skill = db_session.query(db.Skill).filter(
-        db.Skill.user_id == user.id,
-        db.Skill.skill_name == skill_data.skill_name
-    ).first()
-    if existing_skill:
+    existing = await fetch_one(
+        db.Skill.select().where(
+            (db.Skill.user == user["id"]) & (db.Skill.skill_name == skill_data.skill_name)
+        )
+    )
+    if existing:
         raise HTTPException(status_code=409, detail="A skill with this name already exists.")
 
-    new_skill = db.Skill(skill_name=skill_data.skill_name, user_id=user.id)
-    db_session.add(new_skill)
-    db_session.commit()
-    db_session.refresh(new_skill)
+    inserted = await db.Skill.insert(
+        db.Skill(skill_name=skill_data.skill_name, user=user["id"])
+    ).returning(db.Skill.id).run()
+    skill_id = inserted[0]["id"]
 
     for point in skill_data.bullet_points:
-        bullet = db.SkillBullet(text=point, skill_id=new_skill.id)
-        db_session.add(bullet)
-    db_session.commit()
-    
+        await db.SkillBullet.insert(
+            db.SkillBullet(text=point, skill=skill_id)
+        ).run()
+
+    bullets = await db.SkillBullet.select(db.SkillBullet.text).where(db.SkillBullet.skill == skill_id).run()
     return {
-        "id": new_skill.id,
-        "skill_name": new_skill.skill_name,
-        "bullet_points": [b.text for b in new_skill.bullet_points]
+        "id": skill_id,
+        "skill_name": skill_data.skill_name,
+        "bullet_points": [b["text"] for b in bullets]
     }
+
 
 @app.put("/api/skills/{skill_id}")
 async def update_skill(
     skill_id: int,
     skill_data: Skill,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    skill = db_session.query(db.Skill).filter(db.Skill.id == skill_id, db.Skill.user_id == user.id).first()
+    skill = await fetch_one(
+        db.Skill.select().where(
+            (db.Skill.id == skill_id) & (db.Skill.user == user["id"])
+        )
+    )
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
 
-    skill.skill_name = skill_data.skill_name
-    
-    db_session.query(db.SkillBullet).filter(db.SkillBullet.skill_id == skill_id).delete()
+    await db.Skill.update({
+        db.Skill.skill_name: skill_data.skill_name
+    }).where(db.Skill.id == skill_id).run()
+
+    await db.SkillBullet.delete().where(db.SkillBullet.skill == skill_id).run()
     for point in skill_data.bullet_points:
-        bullet = db.SkillBullet(text=point, skill_id=skill_id)
-        db_session.add(bullet)
-    
-    db_session.commit()
-    db_session.refresh(skill)
+        await db.SkillBullet.insert(
+            db.SkillBullet(text=point, skill=skill_id)
+        ).run()
+
+    bullets = await db.SkillBullet.select(db.SkillBullet.text).where(db.SkillBullet.skill == skill_id).run()
     return {
-        "id": skill.id,
-        "skill_name": skill.skill_name,
-        "bullet_points": [b.text for b in skill.bullet_points]
+        "id": skill_id,
+        "skill_name": skill_data.skill_name,
+        "bullet_points": [b["text"] for b in bullets]
     }
+
 
 @app.delete("/api/skills/{skill_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_skill(
     skill_id: int,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    skill = db_session.query(db.Skill).filter(db.Skill.id == skill_id, db.Skill.user_id == user.id).first()
+    skill = await fetch_one(
+        db.Skill.select().where(
+            (db.Skill.id == skill_id) & (db.Skill.user == user["id"])
+        )
+    )
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
 
-    db_session.delete(skill)
-    db_session.commit()
+    await db.Skill.delete().where(db.Skill.id == skill_id).run()
     return
+
 
 @app.get("/manage/skills", response_class=HTMLResponse)
 async def manage_skills_page(request: Request):
@@ -800,127 +931,142 @@ async def manage_skills_page(request: Request):
         jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return RedirectResponse(url="/login", status_code=303)
-    
+
     with open("frontend/manage_skills.html") as f:
         return HTMLResponse(f.read())
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 @app.get("/api/projects")
 async def get_projects(
-    q: Optional[str] = None, 
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    q: Optional[str] = None,
+    user: dict = Depends(get_current_user)
 ):
-    query = db_session.query(db.Project).filter(db.Project.user_id == user.id)
+    query = db.Project.select().where(db.Project.user == user["id"])
     if q:
-        query = query.filter(db.Project.project_name.ilike(f"%{q}%"))
-    projects = query.all()
-    return [{"id": p.id, "project_name": p.project_name, "github_link": p.github_link, "bullet_points": [b.text for b in p.bullet_points]} for p in projects]
+        query = query.where(db.Project.project_name.ilike(f"%{q}%"))
+    projects = await query.run()
+
+    results = []
+    for p in projects:
+        bullets = await db.ProjectBullet.select(db.ProjectBullet.text).where(db.ProjectBullet.project == p["id"]).run()
+        results.append({
+            "id": p["id"],
+            "project_name": p["project_name"],
+            "github_link": p["github_link"],
+            "bullet_points": [b["text"] for b in bullets]
+        })
+    return results
+
 
 @app.get("/api/projects/{project_id}/bullets")
 async def get_project_bullets(
-    project_id: int, 
-    q: Optional[str] = None, 
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    project_id: int,
+    q: Optional[str] = None,
+    user: dict = Depends(get_current_user)
 ):
-    project = db_session.query(db.Project).filter(
-        db.Project.id == project_id,
-        db.Project.user_id == user.id
-    ).first()
-    
+    project = await fetch_one(
+        db.Project.select().where(
+            (db.Project.id == project_id) & (db.Project.user == user["id"])
+        )
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-        
-    query = db_session.query(db.ProjectBullet.text).filter(db.ProjectBullet.project_id == project_id)
+
+    query = db.ProjectBullet.select(db.ProjectBullet.text).where(db.ProjectBullet.project == project_id)
     if q:
-        query = query.filter(db.ProjectBullet.text.ilike(f"%{q}%"))
-    bullets = query.distinct().all()
-    return [b[0] for b in bullets]
+        query = query.where(db.ProjectBullet.text.ilike(f"%{q}%"))
+    bullets = await query.run()
+    return [b["text"] for b in bullets]
+
+
 
 @app.post("/api/projects", status_code=status.HTTP_201_CREATED)
 async def create_project(
     project_data: Project,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    new_project = db.Project(
-        project_name=project_data.project_name,
-        github_link=project_data.github_link,
-        user_id=user.id
+    existing = await fetch_one(
+        db.Project.select().where(
+            (db.Project.project_name == project_data.project_name) &
+            (db.Project.github_link == project_data.github_link) &
+            (db.Project.user == user["id"])
+        )
     )
-    db_session.add(new_project)
-    db_session.commit()
-    db_session.refresh(new_project)
+    if existing:
+        raise HTTPException(status_code=409, detail="Project already exists.")
+
+    inserted = await db.Project.insert(
+        db.Project(
+            project_name=project_data.project_name,
+            github_link=project_data.github_link,
+            user=user["id"]
+        )
+    ).returning(db.Project.id).run()
+    project_id = inserted[0]["id"]
 
     for point in project_data.bullet_points:
-        bullet = db.ProjectBullet(text=point, project_id=new_project.id)
-        db_session.add(bullet)
-    db_session.commit()
-    
+        await db.ProjectBullet.insert(
+            db.ProjectBullet(text=point, project=project_id)
+        ).run()
+
+    bullets = await db.ProjectBullet.select(db.ProjectBullet.text).where(db.ProjectBullet.project == project_id).run()
     return {
-        "id": new_project.id,
-        "project_name": new_project.project_name,
-        "github_link": new_project.github_link,
-        "bullet_points": [b.text for b in new_project.bullet_points]
+        "id": project_id,
+        "project_name": project_data.project_name,
+        "github_link": project_data.github_link,
+        "bullet_points": [b["text"] for b in bullets]
     }
 
 @app.put("/api/projects/{project_id}")
 async def update_project(
     project_id: int,
     project_data: Project,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    project = db_session.query(db.Project).filter(db.Project.id == project_id, db.Project.user_id == user.id).first()
+    project = await fetch_one(
+        db.Project.select().where(
+            (db.Project.id == project_id) & (db.Project.user == user["id"])
+        )
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    project.project_name = project_data.project_name
-    project.github_link = project_data.github_link
-    
-    db_session.query(db.ProjectBullet).filter(db.ProjectBullet.project_id == project_id).delete()
+    await db.Project.update({
+        db.Project.project_name: project_data.project_name,
+        db.Project.github_link: project_data.github_link
+    }).where(db.Project.id == project_id).run()
+
+    await db.ProjectBullet.delete().where(db.ProjectBullet.project == project_id).run()
     for point in project_data.bullet_points:
-        bullet = db.ProjectBullet(text=point, project_id=project_id)
-        db_session.add(bullet)
-    
-    db_session.commit()
-    db_session.refresh(project)
+        await db.ProjectBullet.insert(
+            db.ProjectBullet(text=point, project=project_id)
+        ).run()
+
+    bullets = await db.ProjectBullet.select(db.ProjectBullet.text).where(db.ProjectBullet.project == project_id).run()
     return {
-        "id": project.id,
-        "project_name": project.project_name,
-        "github_link": project.github_link,
-        "bullet_points": [b.text for b in project.bullet_points]
+        "id": project_id,
+        "project_name": project_data.project_name,
+        "github_link": project_data.github_link,
+        "bullet_points": [b["text"] for b in bullets]
     }
+
 
 @app.delete("/api/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     project_id: int,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    project = db_session.query(db.Project).filter(db.Project.id == project_id, db.Project.user_id == user.id).first()
+    project = await fetch_one(
+        db.Project.select().where(
+            (db.Project.id == project_id) & (db.Project.user == user["id"])
+        )
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    db_session.delete(project)
-    db_session.commit()
+    await db.Project.delete().where(db.Project.id == project_id).run()
     return
+
 
 @app.get("/manage/projects", response_class=HTMLResponse)
 async def manage_projects_page(request: Request):
@@ -931,146 +1077,147 @@ async def manage_projects_page(request: Request):
         jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return RedirectResponse(url="/login", status_code=303)
-    
+
     with open("frontend/manage_projects.html") as f:
         return HTMLResponse(f.read())
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 @app.get("/api/experiences")
 async def get_experiences(
-    q: Optional[str] = None, 
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    q: Optional[str] = None,
+    user: dict = Depends(get_current_user)
 ):
-    query = db_session.query(db.Experience).filter(db.Experience.user_id == user.id)
+    query = db.Experience.select().where(db.Experience.user == user["id"])
     if q:
-        query = query.filter(db.Experience.experience_name.ilike(f"%{q}%"))
-    exps = query.all()
-    return [{
-        "id": e.id,
-        "experience_name": e.experience_name, 
-        "start_year": e.start_year,
-        "end_year": e.end_year,
-        "ongoing": e.ongoing,
-        "bullet_points": [b.text for b in e.bullet_points]
-    } for e in exps]
+        query = query.where(db.Experience.experience_name.ilike(f"%{q}%"))
+    exps = await query.run()
+
+    results = []
+    for e in exps:
+        bullets = await db.ExperienceBullet.select(db.ExperienceBullet.text).where(db.ExperienceBullet.experience == e["id"]).run()
+        results.append({
+            "id": e["id"],
+            "experience_name": e["experience_name"],
+            "start_year": e["start_year"],
+            "end_year": e["end_year"],
+            "bullet_points": [b["text"] for b in bullets]
+        })
+    return results
+
 
 @app.get("/api/experiences/{experience_id}/bullets")
 async def get_experience_bullets(
-    experience_id: int, 
-    q: Optional[str] = None, 
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    experience_id: int,
+    q: Optional[str] = None,
+    user: dict = Depends(get_current_user)
 ):
-
-    exp = db_session.query(db.Experience).filter(
-        db.Experience.id == experience_id,
-        db.Experience.user_id == user.id
-    ).first()
-    
+    exp = await fetch_one(
+        db.Experience.select().where(
+            (db.Experience.id == experience_id) & (db.Experience.user == user["id"])
+        )
+    )
     if not exp:
         raise HTTPException(status_code=404, detail="Experience not found")
-        
-    query = db_session.query(db.ExperienceBullet.text).filter(db.ExperienceBullet.experience_id == experience_id)
+
+    query = db.ExperienceBullet.select(db.ExperienceBullet.text).where(db.ExperienceBullet.experience == experience_id)
     if q:
-        query = query.filter(db.ExperienceBullet.text.ilike(f"%{q}%"))
-    bullets = query.distinct().all()
-    return [b[0] for b in bullets]
+        query = query.where(db.ExperienceBullet.text.ilike(f"%{q}%"))
+    bullets = await query.run()
+    return [b["text"] for b in bullets]
+
 
 @app.post("/api/experiences", status_code=status.HTTP_201_CREATED)
 async def create_experience(
     exp_data: Experience,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    new_exp = db.Experience(
-        experience_name=exp_data.experience_name,
-        start_year=exp_data.start_year,
-        end_year=exp_data.end_year,
-        ongoing=exp_data.ongoing,
-        user_id=user.id
+    existing = await fetch_one(
+        db.Experience.select().where(
+            (db.Experience.experience_name == exp_data.experience_name) &
+            (db.Experience.start_year == exp_data.start_year) &
+            (db.Experience.end_year == exp_data.end_year) &
+            (db.Experience.user == user["id"])
+        )
     )
-    db_session.add(new_exp)
-    db_session.commit()
-    db_session.refresh(new_exp)
+    if existing:
+        raise HTTPException(status_code=409, detail="Experience already exists.")
+
+    inserted = await db.Experience.insert(
+        db.Experience(
+            experience_name=exp_data.experience_name,
+            start_year=exp_data.start_year,
+            end_year=exp_data.end_year,
+            user=user["id"]
+        )
+    ).returning(db.Experience.id).run()
+    exp_id = inserted[0]["id"]
 
     for point in exp_data.bullet_points:
-        bullet = db.ExperienceBullet(text=point, experience_id=new_exp.id)
-        db_session.add(bullet)
-    db_session.commit()
-    
+        await db.ExperienceBullet.insert(
+            db.ExperienceBullet(text=point, experience=exp_id)
+        ).run()
+
+    bullets = await db.ExperienceBullet.select(db.ExperienceBullet.text).where(db.ExperienceBullet.experience == exp_id).run()
     return {
-        "id": new_exp.id,
-        "experience_name": new_exp.experience_name,
-        "start_year": new_exp.start_year,
-        "end_year": new_exp.end_year,
-        "ongoing": new_exp.ongoing,
-        "bullet_points": [b.text for b in new_exp.bullet_points]
+        "id": exp_id,
+        "experience_name": exp_data.experience_name,
+        "start_year": exp_data.start_year,
+        "end_year": exp_data.end_year,
+        "bullet_points": [b["text"] for b in bullets]
     }
 
 @app.put("/api/experiences/{experience_id}")
 async def update_experience(
     experience_id: int,
     exp_data: Experience,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    exp = db_session.query(db.Experience).filter(db.Experience.id == experience_id, db.Experience.user_id == user.id).first()
+    exp = await fetch_one(
+        db.Experience.select().where(
+            (db.Experience.id == experience_id) & (db.Experience.user == user["id"])
+        )
+    )
     if not exp:
         raise HTTPException(status_code=404, detail="Experience not found")
 
-    exp.experience_name = exp_data.experience_name
-    exp.start_year = exp_data.start_year
-    exp.end_year = exp_data.end_year
-    exp.ongoing = exp_data.ongoing
-    
-    db_session.query(db.ExperienceBullet).filter(db.ExperienceBullet.experience_id == experience_id).delete()
+    await db.Experience.update({
+        db.Experience.experience_name: exp_data.experience_name,
+        db.Experience.start_year: exp_data.start_year,
+        db.Experience.end_year: exp_data.end_year,
+    }).where(db.Experience.id == experience_id).run()
+
+    await db.ExperienceBullet.delete().where(db.ExperienceBullet.experience == experience_id).run()
     for point in exp_data.bullet_points:
-        bullet = db.ExperienceBullet(text=point, experience_id=experience_id)
-        db_session.add(bullet)
-    
-    db_session.commit()
-    db_session.refresh(exp)
+        await db.ExperienceBullet.insert(
+            db.ExperienceBullet(text=point, experience=experience_id)
+        ).run()
+
+    bullets = await db.ExperienceBullet.select(db.ExperienceBullet.text).where(db.ExperienceBullet.experience == experience_id).run()
     return {
-        "id": exp.id,
-        "experience_name": exp.experience_name,
-        "start_year": exp.start_year,
-        "end_year": exp.end_year,
-        "ongoing": exp.ongoing,
-        "bullet_points": [b.text for b in exp.bullet_points]
+        "id": experience_id,
+        "experience_name": exp_data.experience_name,
+        "start_year": exp_data.start_year,
+        "end_year": exp_data.end_year,
+        "bullet_points": [b["text"] for b in bullets]
     }
+
 
 @app.delete("/api/experiences/{experience_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_experience(
     experience_id: int,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    exp = db_session.query(db.Experience).filter(db.Experience.id == experience_id, db.Experience.user_id == user.id).first()
+    exp = await fetch_one(
+        db.Experience.select().where(
+            (db.Experience.id == experience_id) & (db.Experience.user == user["id"])
+        )
+    )
     if not exp:
         raise HTTPException(status_code=404, detail="Experience not found")
 
-    db_session.delete(exp)
-    db_session.commit()
+    await db.Experience.delete().where(db.Experience.id == experience_id).run()
     return
+
 
 @app.get("/manage/experience", response_class=HTMLResponse)
 async def manage_experience_page(request: Request):
@@ -1081,87 +1228,102 @@ async def manage_experience_page(request: Request):
         jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return RedirectResponse(url="/login", status_code=303)
-    
+
     with open("frontend/manage_experience.html") as f:
         return HTMLResponse(f.read())
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 @app.get("/api/educations")
 async def get_educations(
-    q: Optional[str] = None, 
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    q: Optional[str] = None,
+    user: dict = Depends(get_current_user)
 ):
-    query = db_session.query(db.Education).filter(db.Education.user_id == user.id)
+    query = db.Education.select().where(db.Education.user == user["id"])
     if q:
-        query = query.filter(
-            or_(
-                db.Education.education_name.ilike(f"%{q}%"),
-                db.Education.institution.ilike(f"%{q}%")
-            )
+        query = query.where(
+            (db.Education.education_name.ilike(f"%{q}%")) |
+            (db.Education.institution.ilike(f"%{q}%"))
         )
-    edus = query.all()
+    edus = await query.run()
     return edus
+
+
 
 @app.post("/api/educations", status_code=status.HTTP_201_CREATED)
 async def create_education(
     edu_data: Education,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    new_edu = db.Education(**edu_data.dict(), user_id=user.id)
-    db_session.add(new_edu)
-    db_session.commit()
-    db_session.refresh(new_edu)
-    return new_edu
+    existing = await fetch_one(
+        db.Education.select().where(
+            (db.Education.education_name == edu_data.education_name) &
+            (db.Education.institution == edu_data.institution) &
+            (db.Education.start == edu_data.start) &
+            (db.Education.end == edu_data.end) &
+            (db.Education.grade == edu_data.grade) &
+            (db.Education.user == user["id"])
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Education already exists.")
+
+    inserted = await db.Education.insert(
+        db.Education(
+            education_name=edu_data.education_name,
+            institution=edu_data.institution,
+            start=edu_data.start,
+            end=edu_data.end,
+            grade=edu_data.grade,
+            user=user["id"]
+        )
+    ).returning(db.Education.id).run()
+    edu_id = inserted[0]["id"]
+    edu = await fetch_one(db.Education.select().where(db.Education.id == edu_id))
+    return edu
+
 
 @app.put("/api/educations/{education_id}")
 async def update_education(
     education_id: int,
     edu_data: Education,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    edu = db_session.query(db.Education).filter(db.Education.id == education_id, db.Education.user_id == user.id).first()
+    edu = await fetch_one(
+        db.Education.select().where(
+            (db.Education.id == education_id) & (db.Education.user == user["id"])
+        )
+    )
     if not edu:
         raise HTTPException(status_code=404, detail="Education not found")
 
-    edu.education_name = edu_data.education_name
-    edu.institution = edu_data.institution
-    edu.start = edu_data.start
-    edu.end = edu_data.end
-    edu.grade = edu_data.grade
-    
-    db_session.commit()
-    db_session.refresh(edu)
-    return edu
+    await db.Education.update({
+        db.Education.education_name: edu_data.education_name,
+        db.Education.institution: edu_data.institution,
+        db.Education.start: edu_data.start,
+        db.Education.end: edu_data.end,
+        db.Education.grade: edu_data.grade
+    }).where(db.Education.id == education_id).run()
+
+    updated = await fetch_one(db.Education.select().where(db.Education.id == education_id))
+    return updated
+
 
 @app.delete("/api/educations/{education_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_education(
     education_id: int,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    edu = db_session.query(db.Education).filter(db.Education.id == education_id, db.Education.user_id == user.id).first()
+    edu = await fetch_one(
+        db.Education.select().where(
+            (db.Education.id == education_id) & (db.Education.user == user["id"])
+        )
+    )
     if not edu:
         raise HTTPException(status_code=404, detail="Education not found")
 
-    db_session.delete(edu)
-    db_session.commit()
+    await db.Education.delete().where(db.Education.id == education_id).run()
     return
+
 
 @app.get("/manage/education", response_class=HTMLResponse)
 async def manage_education_page(request: Request):
@@ -1172,78 +1334,87 @@ async def manage_education_page(request: Request):
         jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return RedirectResponse(url="/login", status_code=303)
-    
+
     with open("frontend/manage_education.html") as f:
         return HTMLResponse(f.read())
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-@app.get("/api/references")
-async def get_references(
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
-):
-    refs = db_session.query(db.Reference).filter(db.Reference.user_id == user.id).all()
-    return refs
-
 @app.post("/api/references", status_code=status.HTTP_201_CREATED)
 async def create_reference(
     ref_data: Reference,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    new_ref = db.Reference(**ref_data.dict(), user_id=user.id)
-    db_session.add(new_ref)
-    db_session.commit()
-    db_session.refresh(new_ref)
-    return new_ref
+    existing = await fetch_one(
+        db.Reference.select().where(
+            (db.Reference.referer_name == ref_data.referer_name) &
+            (db.Reference.referer_institute == ref_data.referer_institute) &
+            (db.Reference.position == ref_data.position) &
+            (db.Reference.connection_type == ref_data.connection_type) &
+            (db.Reference.institution_url == ref_data.institution_url) &
+            (db.Reference.user == user["id"])
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Reference already exists.")
+
+    inserted = await db.Reference.insert(
+        db.Reference(
+            referer_name=ref_data.referer_name,
+            referer_institute=ref_data.referer_institute,
+            position=ref_data.position,
+            connection_type=ref_data.connection_type,
+            institution_url=ref_data.institution_url,
+            user=user["id"]
+        )
+    ).returning(db.Reference.id).run()
+    ref_id = inserted[0]["id"]
+    ref = await fetch_one(db.Reference.select().where(db.Reference.id == ref_id))
+    return ref
+
 
 @app.put("/api/references/{reference_id}")
 async def update_reference(
     reference_id: int,
     ref_data: Reference,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    ref = db_session.query(db.Reference).filter(db.Reference.id == reference_id, db.Reference.user_id == user.id).first()
+    ref = await fetch_one(
+        db.Reference.select().where(
+            (db.Reference.id == reference_id) & (db.Reference.user == user["id"])
+        )
+    )
     if not ref:
         raise HTTPException(status_code=404, detail="Reference not found")
 
-    ref.referer_name = ref_data.referer_name
-    ref.referer_institute = ref_data.referer_institute
-    ref.position = ref_data.position
-    ref.connection_type = ref_data.connection_type
-    ref.institution_url = ref_data.institution_url
-    
-    db_session.commit()
-    db_session.refresh(ref)
-    return ref
+    await db.Reference.update({
+        db.Reference.referer_name: ref_data.referer_name,
+        db.Reference.referer_institute: ref_data.referer_institute,
+        db.Reference.position: ref_data.position,
+        db.Reference.connection_type: ref_data.connection_type,
+        db.Reference.institution_url: ref_data.institution_url
+    }).where(db.Reference.id == reference_id).run()
+
+    updated = await fetch_one(db.Reference.select().where(db.Reference.id == reference_id))
+    return updated
+
 
 @app.delete("/api/references/{reference_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_reference(
     reference_id: int,
-    user: db.User = Depends(get_current_user),
-    db_session: Session = Depends(get_db)
+    user: dict = Depends(get_current_user)
 ):
-    ref = db_session.query(db.Reference).filter(db.Reference.id == reference_id, db.Reference.user_id == user.id).first()
+    ref = await fetch_one(
+        db.Reference.select().where(
+            (db.Reference.id == reference_id) & (db.Reference.user == user["id"])
+        )
+    )
     if not ref:
         raise HTTPException(status_code=404, detail="Reference not found")
 
-    db_session.delete(ref)
-    db_session.commit()
+    await db.Reference.delete().where(db.Reference.id == reference_id).run()
     return
+
 
 @app.get("/manage/references", response_class=HTMLResponse)
 async def manage_references_page(request: Request):
@@ -1254,18 +1425,9 @@ async def manage_references_page(request: Request):
         jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return RedirectResponse(url="/login", status_code=303)
-    
+
     with open("frontend/manage_references.html") as f:
         return HTMLResponse(f.read())
-
-
-
-
-
-
-
-
-
 
 
 @app.get("/register", response_class=HTMLResponse)
@@ -1273,30 +1435,12 @@ async def register_page():
     with open("frontend/register.html") as f:
         return HTMLResponse(f.read())
 
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
     with open("frontend/login.html") as f:
         return HTMLResponse(f.read())
-    
 
-
-
-# @app.get("/", response_class=HTMLResponse)
-# async def index(request: Request):
-#     token = request.cookies.get("access_token")
-    
-#     if not token:
-#         return RedirectResponse(url="/login", status_code=303)
-        
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-#         if datetime.utcfromtimestamp(payload.get("exp")) < datetime.utcnow():
-#             return RedirectResponse(url="/login", status_code=303)
-#     except JWTError:
-#         return RedirectResponse(url="/login", status_code=303)
-    
-#     with open("frontend/generate.html") as f:
-#         return HTMLResponse(f.read())
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
@@ -1306,35 +1450,35 @@ async def dashboard(request: Request):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         if datetime.utcfromtimestamp(payload.get("exp")) < datetime.utcnow():
-            # Expired token
             response = RedirectResponse(url="/login", status_code=303)
             response.delete_cookie(key="access_token")
             return response
     except JWTError:
-        # Invalid token
         response = RedirectResponse(url="/login", status_code=303)
         response.delete_cookie(key="access_token")
         return response
-    
+
     with open("frontend/dashboard.html") as f:
         return HTMLResponse(f.read())
-    
+
+
 @app.get("/generate", response_class=HTMLResponse)
 async def generate_page(request: Request):
     token = request.cookies.get("access_token")
-    
+
     if not token:
         return RedirectResponse(url="/login", status_code=303)
-        
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         if datetime.utcfromtimestamp(payload.get("exp")) < datetime.utcnow():
             return RedirectResponse(url="/login", status_code=303)
     except JWTError:
         return RedirectResponse(url="/login", status_code=303)
-    
+
     with open("frontend/generate.html") as f:
         return HTMLResponse(f.read())
+
 
 @app.get("/favicon.ico")
 async def favicon():
