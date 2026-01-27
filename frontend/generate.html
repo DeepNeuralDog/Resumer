@@ -102,6 +102,32 @@
     .autocomplete-suggestion:hover, .autocomplete-suggestion.active {
         background-color: #f0f0f0;
     }
+    .loading-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(255, 255, 255, 0.7);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        font-weight: bold;
+        color: #333;
+    }
+    .loading-overlay.active {
+        display: flex;
+    }
+    .spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid #ddd;
+        border-top-color: #007bff;
+        border-radius: 50%;
+        margin-right: 10px;
+        animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -114,6 +140,25 @@
       </p>
     </div>
     <form id="resume-form">
+
+
+
+      <label>Job Description <textarea name="job_description" placeholder="Paste the job description here..."></textarea></label>
+      <div style="margin-top: 10px; padding: 12px; background: #f2f6ff; border: 1px solid #d6e0ff; border-radius: 6px;">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+          <button type="button" class="add-btn" onclick="findMissingSkills()">Find Missing Skills</button>
+        </div>
+        <div style="margin-top: 10px;">
+          <input id="missing-skill-input" type="text" placeholder="Add a skill you have (free text)">
+          <button type="button" class="add-bullet-btn" onclick="addCustomMissingSkill()">Add</button>
+        </div>
+        <div id="missing-skills-list" style="margin-top: 10px;"></div>
+        <div style="margin-top: 10px;">
+          <button type="button" class="add-btn" onclick="approveMissingSkillsAndOptimize()" style="background:#28a745;">Approve Selected</button>
+        </div>
+      </div>
+
+
       <label>Name <input name="name" required></label>
       <label>Summary <textarea name="summary" onfocus="setupAutocomplete('summary', '/api/summaries')"></textarea></label>
       <div id="summary-suggestions" class="autocomplete-suggestions"></div>
@@ -129,7 +174,6 @@
       </fieldset>
       <label for="template-select">Choose a Resume Template:</label>
       <select name="template" id="template-select" style="width: 100%; padding: 8px; margin-top: 4px; border-radius: 4px; border: 1px solid #ccc;">
-        <!-- Options will be populated by JavaScript -->
       </select>
 
       <div class="section-list" id="skills-section">
@@ -173,6 +217,126 @@
     <div class="preview" id="preview"></div>
   </div>
   <script>
+
+    let approvedMissingSkills = [];
+
+    function setLoading(isLoading) {
+      const overlay = document.getElementById('loading-overlay');
+      if (isLoading) overlay.classList.add('active');
+      else overlay.classList.remove('active');
+    }
+
+
+    function renderMissingSkillsList(skills) {
+      const list = document.getElementById('missing-skills-list');
+      list.innerHTML = '';
+      (skills || []).forEach(skill => {
+        const safeSkill = (skill || '').trim();
+        if (!safeSkill) return;
+        const id = `missing-skill-${btoa(unescape(encodeURIComponent(safeSkill))).replace(/=/g, '')}`;
+        const row = document.createElement('div');
+        row.style.marginBottom = '6px';
+        row.innerHTML = `
+          <label style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" value="${safeSkill}" />
+            ${safeSkill}
+          </label>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    async function findMissingSkills() {
+      setLoading(true);
+      try {
+        const form = document.getElementById('resume-form');
+        const jobDescription = form.job_description.value.trim();
+        if (!jobDescription) {
+          alert('Please paste a job description first.');
+          return;
+        }
+
+        const res = await fetch('/api/ats-gaps', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_description: jobDescription })
+        });
+
+        if (!res.ok) {
+          alert('Failed to fetch missing skills.');
+          console.error(await res.text());
+          return;
+        }
+
+        const data = await res.json();
+        renderMissingSkillsList(data.missing_skills || []);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+
+    function approveMissingSkills() {
+      const list = document.getElementById('missing-skills-list');
+      const checked = list.querySelectorAll('input[type="checkbox"]:checked');
+      approvedMissingSkills = Array.from(checked).map(cb => cb.value);
+      alert(`Approved ${approvedMissingSkills.length} skill(s).`);
+    }
+
+    async function approveMissingSkillsAndOptimize() {
+      approveMissingSkills();
+      await optimizeATS();
+    }
+
+    async function optimizeATS() {
+      setLoading(true);
+      try {
+        const form = document.getElementById('resume-form');
+        const jobDescription = form.job_description.value.trim();
+        if (!jobDescription) {
+          alert('Please paste a job description first.');
+          return;
+        }
+
+        const res = await fetch('/api/ats-optimize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            job_description: jobDescription,
+            selected_missing_skills: approvedMissingSkills
+          })
+        });
+
+        if (!res.ok) {
+          alert('Failed to optimize. Check console for details.');
+          console.error(await res.text());
+          return;
+        }
+
+        const data = await res.json();
+        applyATSData(data);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function addCustomMissingSkill() {
+      const input = document.getElementById('missing-skill-input');
+      const value = input.value.trim();
+      if (!value) return;
+      const list = document.getElementById('missing-skills-list');
+      const row = document.createElement('div');
+      row.style.marginBottom = '6px';
+      row.innerHTML = `
+        <label style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" value="${value}" checked />
+          ${value}
+        </label>
+      `;
+      list.appendChild(row);
+      input.value = '';
+    }
+
 
     async function preloadUserProfile() {
       try {
@@ -391,7 +555,8 @@
         website: form.website.value
       };
       const summary = form.summary.value;
-      
+      const job_description = form.job_description.value;
+
       let image_base64 = null;
       const imageFile = form.image_upload.files[0];
       if (imageFile) {
@@ -477,25 +642,50 @@
         experience: experience,
         projects: projects,
         education: education,
-        references: references
+        references: references,
+        job_description: job_description
       };
     }
 
+
+    function applyATSData(data) {
+      const form = document.getElementById('resume-form');
+      form.summary.value = data.summary || '';
+
+      document.getElementById('skills-section').innerHTML = '';
+      skillCount = 0;
+      (data.skills || []).forEach(addSkill);
+
+      document.getElementById('experience-section').innerHTML = '';
+      expCount = 0;
+      (data.experience || []).forEach(addExperience);
+
+      document.getElementById('projects-section').innerHTML = '';
+      projCount = 0;
+      (data.projects || []).forEach(addProject);
+    }
+
+
     async function generatePDF() {
-      const data = await getFormData();
-      const selectedTemplate = document.getElementById('template-select').value;
-      const res = await fetch('/generate-pdf', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Template-Name': selectedTemplate
-        },
-        body: JSON.stringify(data)
-      });
-      if (!res.ok) { alert('Failed to generate PDF. Check console for details.'); console.error(await res.text()); return; }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      document.getElementById('preview').innerHTML = `<iframe src="${url}"></iframe><br><a href="${url}" download="resume.pdf">Download PDF</a>`;
+      setLoading(true);
+      try {
+        const data = await getFormData();
+        const selectedTemplate = document.getElementById('template-select').value;
+        const res = await fetch('/generate-pdf', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Template-Name': selectedTemplate
+          },
+          body: JSON.stringify(data)
+        });
+        if (!res.ok) { alert('Failed to generate PDF. Check console for details.'); console.error(await res.text()); return; }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        document.getElementById('preview').innerHTML = `<iframe src="${url}"></iframe><br><a href="${url}" download="resume.pdf">Download PDF</a>`;
+      } finally {
+        setLoading(false);
+      }
     }
 
     async function downloadJSON() {
@@ -734,5 +924,9 @@
       preloadEducations();
     }
   </script>
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="spinner"></div>
+    <div>Working…</div>
+  </div>
 </body>
 </html>

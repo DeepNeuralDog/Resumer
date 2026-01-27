@@ -4,13 +4,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from tempfile import NamedTemporaryFile
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from PIL import Image
 import os
 import shutil
 import jinja2
 import base64
 import io
+import json
+import time
+import logging
 import subprocess
 import database as db
 from database import engine, create_db_and_tables
@@ -18,10 +21,31 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from openai import AsyncAzureOpenAI
 
 load_dotenv()
 
 app = FastAPI()
+
+PROMPT_GAPS = """
+You are an ATS resume assistant.
+Given a job description and the user's existing skills/experience/projects,
+return ONLY a list of missing skills the user likely lacks.
+Return JSON with key: missing_skills (array of strings).
+Do not include skills already present.
+"""
+
+PROMPT_FINAL = """
+You are an ATS optimized Resume Assistant. Given:
+- A job description
+- A user's skills/experience/projects (from their DB)
+- A list of user-confirmed additional skills (the user claims they have)
+
+Pick the most relevant items and rewrite bullets to match the job description.
+Be as direct and concise as possible.
+Do not add any skills/experience/projects the user doesn't have.
+Only include user-confirmed additional skills.
+"""
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -30,6 +54,24 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def on_startup():
     create_db_and_tables()
     await engine.start_connection_pool()
+
+    endpoint = os.getenv("LLM_API_ENDPOINT_MINI")
+    subscription_key = os.getenv("LLM_API_KEY_MINI")
+    api_version = os.getenv("LLM_API_VERSION_MINI")
+
+    if all([endpoint, subscription_key, api_version]):
+        app.state.azure_client = AsyncAzureOpenAI(
+            api_version=api_version,
+            azure_endpoint=endpoint,
+            api_key=subscription_key,
+            timeout=300.0,
+            max_retries=2
+        )
+    else:
+        logging.warning("LLM client configuration is missing. ATS optimization will be unavailable.")
+        app.state.azure_client = None
+        raise RuntimeError("LLM client configuration is missing. ATS optimization will be unavailable.")
+
 
 @app.on_event("shutdown")
 async def on_shutdown():
@@ -93,21 +135,32 @@ class SummaryModel(BaseModel):
 
 
 class Skill(BaseModel):
-    skill_name: str
-    bullet_points: List[str]
+    skill_name: str = Field(description="Name of the Skill Group/Category. This describes a category of skills which are related.")
+    bullet_points: List[str] = Field(description="List of bullet points describing the skill category")
 
+    def to_ai_context_string(self) -> str:
+        bullets_str = "Skill_Bullet_Points\n".join([f"- {bp}" for bp in self.bullet_points])
+        return f"Skill Catetory:  {self.skill_name}:\n{bullets_str}"
 
 class Experience(BaseModel):
-    experience_name: str
-    bullet_points: List[str]
+    experience_name: str = Field(description="Name of the Experience")
+    bullet_points: List[str] = Field(description="List of bullet points describing the experience")
     start_year: Optional[str] = None
     end_year: Optional[str] = None
 
+    def to_ai_context_string(self) -> str:
+        bullets_str = "Experience_Bullet_Points\n".join([f"- {bp}" for bp in self.bullet_points])
+        return f"Experience:  {self.experience_name} (From {self.start_year} to {self.end_year}):\n{bullets_str}"
+
 
 class Project(BaseModel):
-    project_name: str
-    bullet_points: List[str]
+    project_name: str = Field(description="Name of the Project")
+    bullet_points: List[str] = Field(description="List of bullet points describing the project")
     github_link: Optional[str] = None
+
+    def to_ai_context_string(self) -> str:
+        bullets_str = "Project_Bullet_Points\n".join([f"- {bp}" for bp in self.bullet_points])
+        return f"Project:  {self.project_name} (GitHub: {self.github_link}):\n{bullets_str}"
 
 
 class Education(BaseModel):
@@ -136,6 +189,144 @@ class ResumeData(BaseModel):
     projects: List[Project]
     education: List[Education]
     references: List[Reference]
+    job_description: Optional[str] = None
+
+
+
+class ATSResumeData(BaseModel):
+    summary: str = Field(description="The optimized summery which fits the job description. Must be as concise as possible.")
+    skills: List[Skill] = Field(description="List of Skills optimized for the job description. Don't add any skills which I don't have.")
+    experience: List[Experience] = Field(description="List of Experience optimized for the job description. Don't add any experience which I don't have.")
+    projects: List[Project] = Field(description="List of optimized projects for the job description. Don't add any projects which I don't have or which are not relevant.")
+
+class ATSGapsResponse(BaseModel):
+    missing_skills: List[str] = Field(default_factory=list)
+
+
+class ATSOptimizeRequest(BaseModel):
+    job_description: str
+    selected_missing_skills: Optional[List[str]] = None
+
+
+
+async def fetch_user_skills(user_id: int) -> List[Skill]:
+    skills = await db.Skill.select().where(db.Skill.user == user_id).run()
+    results: List[Skill] = []
+    for s in skills:
+        bullets = await db.SkillBullet.select(db.SkillBullet.text).where(db.SkillBullet.skill == s["id"]).run()
+        results.append(Skill(
+            skill_name=s["skill_name"],
+            bullet_points=[b["text"] for b in bullets]
+        ))
+    return results
+
+
+async def fetch_user_experience(user_id: int) -> List[Experience]:
+    exps = await db.Experience.select().where(db.Experience.user == user_id).run()
+    results: List[Experience] = []
+    for e in exps:
+        bullets = await db.ExperienceBullet.select(db.ExperienceBullet.text).where(db.ExperienceBullet.experience == e["id"]).run()
+        results.append(Experience(
+            experience_name=e["experience_name"],
+            bullet_points=[b["text"] for b in bullets],
+            start_year=e["start_year"],
+            end_year=e["end_year"]
+        ))
+    return results
+
+
+async def fetch_user_projects(user_id: int) -> List[Project]:
+    projs = await db.Project.select().where(db.Project.user == user_id).run()
+    results: List[Project] = []
+    for p in projs:
+        bullets = await db.ProjectBullet.select(db.ProjectBullet.text).where(db.ProjectBullet.project == p["id"]).run()
+        results.append(Project(
+            project_name=p["project_name"],
+            bullet_points=[b["text"] for b in bullets],
+            github_link=p["github_link"]
+        ))
+    return results
+
+
+async def run_ats_optimization(job_description: str, user_id: int, selected_missing_skills: Optional[List[str]] = None) -> ATSResumeData:
+    client : AsyncAzureOpenAI = app.state.azure_client
+    deployment = os.getenv("LLM_DEPLOYMENT_NAME_MINI")
+
+    if not client:
+        raise HTTPException(status_code=503, detail="LLM client not configured")
+
+    skills = await fetch_user_skills(user_id)
+    experience = await fetch_user_experience(user_id)
+    projects = await fetch_user_projects(user_id)
+
+    input_str = ""
+    input_str += f"Job Description:\n{job_description}\n\n"
+    input_str += "User's Skills:\n"
+    for skill in skills:
+        input_str += skill.to_ai_context_string() + "\n"
+    input_str += "\nUser's Experience: (Note: You must copy paste the experience from here which are relevant to the job description)\n"
+    for exp in experience:
+        input_str += exp.to_ai_context_string() + "\n"
+    input_str += "\nUser's Projects: (Note: You must copy paste the projects from here which are relevant to the job description)\n"
+    for proj in projects:
+        input_str += proj.to_ai_context_string() + "\n"
+    if selected_missing_skills:
+        input_str += "\nUser-Confirmed Additional Skills: (Note: Also create bullet points for these skills and add those bullet points in relevent skill category. You can also create new skill categories if the bullet points do not fit in existing categories)\n"
+        for skill in selected_missing_skills:
+            input_str += f"- {skill}\n"
+
+
+    start = time.time()
+    response = await client.chat.completions.parse(
+        model=deployment,
+        messages=[
+            {"role": "system", "content": PROMPT_FINAL},
+            {"role": "user", "content": f"Input Data: {input_str}"}
+        ],
+        response_format=ATSResumeData
+    )
+    duration = time.time() - start
+
+    print(f"LLM call duration: {duration:.2f} seconds")
+
+    raw = response.choices[0].message.content
+    parsed = json.loads(raw)
+    return ATSResumeData.model_validate(parsed)
+
+
+
+async def run_ats_gaps(job_description: str, user_id: int) -> ATSGapsResponse:
+    client: AsyncAzureOpenAI = app.state.azure_client
+    deployment = os.getenv("LLM_DEPLOYMENT_NAME_MINI")
+
+    if not client:
+        raise HTTPException(status_code=503, detail="LLM client not configured")
+
+    skills = await fetch_user_skills(user_id)
+    experience = await fetch_user_experience(user_id)
+    projects = await fetch_user_projects(user_id)
+
+    input_payload = {
+        "job_description": job_description,
+        "skills": [s.model_dump() for s in skills],
+        "experience": [e.model_dump() for e in experience],
+        "projects": [p.model_dump() for p in projects],
+    }
+    input_str = json.dumps(input_payload)
+
+    response = await client.chat.completions.parse(
+        model=deployment,
+        messages=[
+            {"role": "system", "content": PROMPT_GAPS},
+            {"role": "user", "content": f"Input Data: {input_str}"}
+        ],
+        response_format=ATSGapsResponse
+    )
+
+    raw = response.choices[0].message.content
+    parsed = json.loads(raw)
+    return ATSGapsResponse.model_validate(parsed)
+
 
 
 def verify_password(plain_password, hashed_password):
@@ -474,6 +665,34 @@ async def list_templates():
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+@app.post("/api/ats-gaps")
+async def ats_gaps(
+    payload: ATSOptimizeRequest,
+    user: dict = Depends(get_current_user)
+):
+    gaps = await run_ats_gaps(payload.job_description, user["id"])
+    return gaps
+
+@app.post("/api/ats-optimize")
+async def ats_optimize(
+    payload: ATSOptimizeRequest,
+    user: dict = Depends(get_current_user)
+):
+    ats_data = await run_ats_optimization(
+        payload.job_description,
+        user["id"],
+        selected_missing_skills=payload.selected_missing_skills
+    )
+    return ats_data
+
+@app.post("/api/ats-optimize")
+async def ats_optimize(
+    payload: ATSOptimizeRequest,
+    user: dict = Depends(get_current_user)
+):
+    ats_data = await run_ats_optimization(payload.job_description, user["id"])
+    return ats_data
+
 
 @app.post("/generate-pdf")
 async def generate_pdf(
@@ -482,6 +701,13 @@ async def generate_pdf(
     user: dict = Depends(get_current_user)
 ):
     try:
+        if data.job_description and app.state.azure_client:
+            ats_data = await run_ats_optimization(data.job_description, user["id"])
+            data.summary = ats_data.summary
+            data.skills = ats_data.skills
+            data.experience = ats_data.experience
+            data.projects = ats_data.projects
+
         await save_resume_data(data, user["id"])
 
         template_name = request.headers.get("X-Template-Name", "resume.typ")
