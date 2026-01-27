@@ -22,6 +22,9 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from openai import AsyncAzureOpenAI
+from anthropic import AsyncAnthropicFoundry
+import instructor
+from instructor import Instructor
 
 load_dotenv()
 
@@ -55,23 +58,28 @@ async def on_startup():
     create_db_and_tables()
     await engine.start_connection_pool()
 
-    endpoint = os.getenv("LLM_API_ENDPOINT_MINI")
-    subscription_key = os.getenv("LLM_API_KEY_MINI")
-    api_version = os.getenv("LLM_API_VERSION_MINI")
+    api_key = os.getenv("LLM_API_KEY_ANTHROPIC")
+    endpoint = os.getenv("LLM_API_ENDPOINT_ANTHROPIC")
 
-    if all([endpoint, subscription_key, api_version]):
-        app.state.azure_client = AsyncAzureOpenAI(
-            api_version=api_version,
-            azure_endpoint=endpoint,
-            api_key=subscription_key,
-            timeout=300.0,
-            max_retries=2
-        )
+    if all([api_key, endpoint]):
+            
+        try:
+
+            client = AsyncAnthropicFoundry(
+                    api_key=api_key,
+                    base_url=endpoint,
+                )
+
+            client = instructor.from_anthropic(client)
+            app.state.anthropic_client = client
+
+
+        except Exception as e:
+            app.state.anthropic_client = None
+            raise RuntimeError("Failed to initialize Anthropic client. ATS optimization will be unavailable.") from e
     else:
-        logging.warning("LLM client configuration is missing. ATS optimization will be unavailable.")
-        app.state.azure_client = None
-        raise RuntimeError("LLM client configuration is missing. ATS optimization will be unavailable.")
-
+        app.state.anthropic_client = None
+        raise RuntimeError("Anthropic LLM client configuration is missing. ATS optimization will be unavailable.")
 
 @app.on_event("shutdown")
 async def on_shutdown():
@@ -249,8 +257,8 @@ async def fetch_user_projects(user_id: int) -> List[Project]:
 
 
 async def run_ats_optimization(job_description: str, user_id: int, selected_missing_skills: Optional[List[str]] = None) -> ATSResumeData:
-    client : AsyncAzureOpenAI = app.state.azure_client
-    deployment = os.getenv("LLM_DEPLOYMENT_NAME_MINI")
+    client : Instructor = app.state.anthropic_client
+    deployment = os.getenv("LLM_DEPLOYMENT_NAME_ANTHROPIC")
 
     if not client:
         raise HTTPException(status_code=503, detail="LLM client not configured")
@@ -275,29 +283,26 @@ async def run_ats_optimization(job_description: str, user_id: int, selected_miss
         for skill in selected_missing_skills:
             input_str += f"- {skill}\n"
 
+    try:
+        response = await client.completions.create(
+            model=deployment,
+            messages=[
+                {"role": "system", "content": PROMPT_FINAL},
+                {"role": "user", "content": input_str}
+            ],
+            max_tokens=3000,
+            response_model=ATSResumeData,
+        )
 
-    start = time.time()
-    response = await client.chat.completions.parse(
-        model=deployment,
-        messages=[
-            {"role": "system", "content": PROMPT_FINAL},
-            {"role": "user", "content": f"Input Data: {input_str}"}
-        ],
-        response_format=ATSResumeData
-    )
-    duration = time.time() - start
-
-    print(f"LLM call duration: {duration:.2f} seconds")
-
-    raw = response.choices[0].message.content
-    parsed = json.loads(raw)
-    return ATSResumeData.model_validate(parsed)
-
+        content = ATSResumeData.model_validate(response)
+        return content
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM processing error: {str(e)}")
 
 
 async def run_ats_gaps(job_description: str, user_id: int) -> ATSGapsResponse:
-    client: AsyncAzureOpenAI = app.state.azure_client
-    deployment = os.getenv("LLM_DEPLOYMENT_NAME_MINI")
+    client : Instructor = app.state.anthropic_client
+    deployment = os.getenv("LLM_DEPLOYMENT_NAME_ANTHROPIC")
 
     if not client:
         raise HTTPException(status_code=503, detail="LLM client not configured")
@@ -306,26 +311,35 @@ async def run_ats_gaps(job_description: str, user_id: int) -> ATSGapsResponse:
     experience = await fetch_user_experience(user_id)
     projects = await fetch_user_projects(user_id)
 
-    input_payload = {
-        "job_description": job_description,
-        "skills": [s.model_dump() for s in skills],
-        "experience": [e.model_dump() for e in experience],
-        "projects": [p.model_dump() for p in projects],
-    }
-    input_str = json.dumps(input_payload)
+    input_str = ""
+    input_str += f"Job Description:\n{job_description}\n\n"
+    input_str += "User's Skills:\n"
+    for skill in skills:
+        input_str += skill.to_ai_context_string() + "\n"
+    input_str += "\nUser's Experience:\n"
+    for exp in experience:
+        input_str += exp.to_ai_context_string() + "\n"
+    input_str += "\nUser's Projects:\n"
+    for proj in projects:
+        input_str += proj.to_ai_context_string() + "\n"
 
-    response = await client.chat.completions.parse(
-        model=deployment,
-        messages=[
-            {"role": "system", "content": PROMPT_GAPS},
-            {"role": "user", "content": f"Input Data: {input_str}"}
-        ],
-        response_format=ATSGapsResponse
-    )
 
-    raw = response.choices[0].message.content
-    parsed = json.loads(raw)
-    return ATSGapsResponse.model_validate(parsed)
+    try:
+        response = await client.completions.create(
+            model=deployment,
+            messages=[
+                {"role": "system", "content": PROMPT_FINAL},
+                {"role": "user", "content": input_str}
+            ],
+            max_tokens=1000,
+            response_model=ATSGapsResponse,
+        )
+
+        content = ATSGapsResponse.model_validate(response)
+        return content
+    except Exception as e:
+        print("LLM ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=f"LLM processing error: {str(e)}")
 
 
 
