@@ -14,17 +14,16 @@ import io
 import json
 import time
 import logging
-import subprocess
 import database as db
 from database import engine, create_db_and_tables
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from openai import AsyncAzureOpenAI
 from anthropic import AsyncAnthropicFoundry
 import instructor
 from instructor import Instructor
+from weasyprint import HTML, CSS
 
 load_dotenv()
 
@@ -56,7 +55,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.on_event("startup")
 async def on_startup():
     create_db_and_tables()
-    await engine.start_connection_pool()
+    # SQLite doesn't need connection pooling - it uses file-based connections
 
     api_key = os.getenv("LLM_API_KEY_ANTHROPIC")
     endpoint = os.getenv("LLM_API_ENDPOINT_ANTHROPIC")
@@ -83,7 +82,8 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    await engine.close_connection_pool()
+    # SQLite doesn't need explicit connection pool cleanup
+    pass
     
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -99,7 +99,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-TEMPLATE_DIR = "typst_templates"
+TEMPLATE_DIR = "html_templates"
 
 
 # User models
@@ -410,30 +410,7 @@ async def get_current_user(request: Request):
     return user
 
 
-def py_to_typst(val):
-    if isinstance(val, str):
-        return '"' + val.replace('\\\\', '\\\\\\\\').replace('"', '\\\\"') + '"'
-    elif isinstance(val, bool):
-        return 'true' if val else 'false'
-    elif val is None:
-        return 'none'
-    elif isinstance(val, (int, float)):
-        return str(val)
-    elif isinstance(val, list):
-        if not val:
-            return '()'
-        processed_items = [py_to_typst(v) for v in val]
-        items_str = ', '.join(processed_items)
-        if len(processed_items) == 1:
-            return f'({items_str},)'
-        else:
-            return f'({items_str})'
-    elif isinstance(val, dict):
-        if not val:
-            return '(:)'
-        return '(' + ', '.join(f'{k}: {py_to_typst(v)}' for k, v in val.items()) + ')'
-    else:
-        return 'none'
+
 async def save_resume_data(data: ResumeData, user_id: int):
     if data.summary and data.summary.strip():
         existing_summary = await fetch_one(
@@ -674,7 +651,7 @@ async def logout():
 @app.get("/templates")
 async def list_templates():
     try:
-        templates = [f for f in os.listdir(TEMPLATE_DIR) if f.endswith(".typ")]
+        templates = [f for f in os.listdir(TEMPLATE_DIR) if f.endswith(".html")]
         return JSONResponse(templates)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -715,7 +692,7 @@ async def generate_pdf(
     user: dict = Depends(get_current_user)
 ):
     try:
-        if data.job_description and app.state.azure_client:
+        if data.job_description and app.state.anthropic_client:
             ats_data = await run_ats_optimization(data.job_description, user["id"])
             data.summary = ats_data.summary
             data.skills = ats_data.skills
@@ -724,41 +701,21 @@ async def generate_pdf(
 
         await save_resume_data(data, user["id"])
 
-        template_name = request.headers.get("X-Template-Name", "resume.typ")
+        template_name = request.headers.get("X-Template-Name", "basic_resume.html")
         template_path = os.path.join(TEMPLATE_DIR, template_name)
 
         if not os.path.exists(template_path):
             return JSONResponse({"error": f"Template '{template_name}' not found."}, status_code=404)
 
+        # Set up Jinja2 environment for HTML templates
         env = jinja2.Environment(
-            variable_start_string='{{',
-            variable_end_string='}}',
-            block_start_string='{%',
-            block_end_string='%}',
-            comment_start_string='{#JINJA#',
-            comment_end_string='#JINJA#}'
+            loader=jinja2.FileSystemLoader(TEMPLATE_DIR),
+            autoescape=True
         )
-        env.filters['typst'] = py_to_typst
-        with open(template_path) as f:
-            typst_template = f.read()
-        template = env.from_string(typst_template)
+        template = env.get_template(template_name)
 
-        with NamedTemporaryFile("w", suffix=".typ", delete=False) as typ_file:
-            typ_file_path = typ_file.name
-
-        # Copy icon files to the same directory as the .typ file
-        typ_dir = os.path.dirname(typ_file_path)
-        icon_files = ["email.png", "phone.png", "linkedin.png", "github.png", "location.png"]
-
-        for icon_file in icon_files:
-            source_path = os.path.join("static", icon_file)
-            dest_path = os.path.join(typ_dir, icon_file)
-            if os.path.exists(source_path):
-                shutil.copy2(source_path, dest_path)
-
-        image_typst_path = None
-        image_full_path = None
-
+        # Process profile image to base64 data URI if provided
+        image_data_uri = None
         if data.image_base64:
             try:
                 if ',' in data.image_base64:
@@ -767,7 +724,6 @@ async def generate_pdf(
                     image_data_b64 = data.image_base64
 
                 image_data = base64.b64decode(image_data_b64)
-
                 image = Image.open(io.BytesIO(image_data))
 
                 if image.mode in ('RGBA', 'LA', 'P'):
@@ -775,15 +731,13 @@ async def generate_pdf(
                 elif image.mode != 'RGB':
                     image = image.convert('RGB')
 
-                image_filename = "resume_image.png"
-                image_full_path = os.path.join(typ_dir, image_filename)
-
-                image.save(image_full_path, 'PNG', optimize=True)
-
-                image_typst_path = image_filename
+                # Convert back to base64 for embedding in HTML
+                buffered = io.BytesIO()
+                image.save(buffered, format="PNG", optimize=True)
+                image_data_uri = f"data:image/png;base64,{base64.b64encode(buffered.getvalue()).decode()}"
 
             except Exception as e:
-                print(f"Error processing image: {e}")
+                logging.error(f"Error processing image: {e}")
 
         # Update contact info from user data
         contact_data = {
@@ -795,12 +749,12 @@ async def generate_pdf(
             "website": data.contact.website or user["website"]
         }
 
-        sanitized_exp : List[Experience] = []
-        sanitized_edu : List[Education] = []
+        # Sanitize experience and education dates
+        sanitized_exp: List[Experience] = []
+        sanitized_edu: List[Education] = []
 
         for exp in data.experience:
             if exp.end_year == "":
-                print("DHORA PORSE")
                 new_exp = Experience(
                     experience_name=exp.experience_name,
                     bullet_points=exp.bullet_points,
@@ -813,7 +767,6 @@ async def generate_pdf(
 
         for edu in data.education:
             if edu.end == "":
-                print("DHORA PORSE")
                 new_edu = Education(
                     education_name=edu.education_name,
                     institution=edu.institution,
@@ -824,57 +777,34 @@ async def generate_pdf(
                 sanitized_edu.append(new_edu)
             else:
                 sanitized_edu.append(edu)
-        
+
         data.experience = sanitized_exp
         data.education = sanitized_edu
 
-
-        print("SANITIZED EXPERIENCE:")
-        print(data.experience)
-        print("SANITIZED EDUCATION:")
-        print(data.education)
-
-        typst_filled = template.render(
+        # Render HTML template
+        html_content = template.render(
             name=data.name or user["name"],
-            contact=py_to_typst(contact_data),
-            summary=py_to_typst(data.summary),
-            image_path=py_to_typst(image_typst_path),
-            skills=py_to_typst([s.dict() for s in data.skills]),
-            experience=py_to_typst([e.dict() for e in data.experience]),
-            projects=py_to_typst([p.dict() for p in data.projects]),
-            education=py_to_typst([e.dict() for e in data.education]),
-            references=py_to_typst([r.dict() for r in data.references])
+            contact=contact_data,
+            summary=data.summary,
+            image_data_uri=image_data_uri,
+            skills=[s.dict() for s in data.skills],
+            experience=[e.dict() for e in data.experience],
+            projects=[p.dict() for p in data.projects],
+            education=[e.dict() for e in data.education],
+            references=[r.dict() for r in data.references]
         )
 
-        with open(typ_file_path, "w") as typ_file:
-            typ_file.write(typst_filled)
+        # Generate PDF using WeasyPrint
+        with NamedTemporaryFile("wb", suffix=".pdf", delete=False) as pdf_file:
+            pdf_path = pdf_file.name
 
-        pdf_path = typ_file_path.replace(".typ", ".pdf")
-        try:
-            subprocess.run(["typst", "compile", typ_file_path, pdf_path], check=True, capture_output=True, text=True)
-        except subprocess.CalledProcessError as e:
-            print("TYPST ERROR OUTPUT:", e.stderr)
-            if image_full_path and os.path.exists(image_full_path):
-                os.unlink(image_full_path)
-            for icon_file in icon_files:
-                icon_path_to_remove = os.path.join(typ_dir, icon_file)
-                if os.path.exists(icon_path_to_remove):
-                    os.unlink(icon_path_to_remove)
-            return JSONResponse({"error": e.stderr}, status_code=500)
-
-        # Clean up temp files after successful compilation
-        if image_full_path and os.path.exists(image_full_path):
-            os.unlink(image_full_path)
-
-        for icon_file in icon_files:
-            icon_path = os.path.join(typ_dir, icon_file)
-            if os.path.exists(icon_path):
-                os.unlink(icon_path)
+        html_doc = HTML(string=html_content, base_url=os.path.abspath(TEMPLATE_DIR))
+        html_doc.write_pdf(pdf_path)
 
         return FileResponse(pdf_path, media_type="application/pdf", filename="resume.pdf")
     except Exception as e:
         import traceback
-        print("SERVER ERROR:", traceback.format_exc())
+        logging.error(f"SERVER ERROR: {traceback.format_exc()}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 

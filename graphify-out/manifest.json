@@ -1,0 +1,102 @@
+{
+  ".vscode/settings.json": {
+    "mtime": 1769423112.377653,
+    "ast_hash": "a467aab6af1bf67d4045daaac1b663cd",
+    "semantic_hash": "a467aab6af1bf67d4045daaac1b663cd"
+  },
+  "bal.py": {
+    "mtime": 1769449873.1309688,
+    "ast_hash": "0b85484648829e625bc7b5837064ae8f",
+    "semantic_hash": "0b85484648829e625bc7b5837064ae8f"
+  },
+  "database.py": {
+    "mtime": 1769454558.8943834,
+    "ast_hash": "e5f9ce2d21c650fcae2c9b4bb5d7d472",
+    "semantic_hash": "e5f9ce2d21c650fcae2c9b4bb5d7d472"
+  },
+  "dedup.sql": {
+    "mtime": 1769457855.97727,
+    "ast_hash": "0b8f94876dfcc1cabd1f830ebddd7eb2",
+    "semantic_hash": "0b8f94876dfcc1cabd1f830ebddd7eb2"
+  },
+  "main.py": {
+    "mtime": 1770532558.3196278,
+    "ast_hash": "e35fbed0a80252bb367b3886f673b1e4",
+    "semantic_hash": "e35fbed0a80252bb367b3886f673b1e4"
+  },
+  "pyproject.toml": {
+    "mtime": 1771184227.4446378,
+    "ast_hash": "3052c4b17752ad9e32ed633ee070b63a",
+    "semantic_hash": "3052c4b17752ad9e32ed633ee070b63a"
+  },
+  "README.md": {
+    "mtime": 1768466265.0186427,
+    "ast_hash": "6fd9f6469cbc1ea33dc88b866afb2819",
+    "semantic_hash": "6fd9f6469cbc1ea33dc88b866afb2819"
+  },
+  "frontend/dashboard.html": {
+    "mtime": 1768466265.0188549,
+    "ast_hash": "87d64f0fbae2c037d067cc515404061c",
+    "semantic_hash": "87d64f0fbae2c037d067cc515404061c"
+  },
+  "frontend/generate.html": {
+    "mtime": 1769540740.0230598,
+    "ast_hash": "060fa438979541df3fd9291b4e561b07",
+    "semantic_hash": "060fa438979541df3fd9291b4e561b07"
+  },
+  "frontend/login.html": {
+    "mtime": 1768466265.0191004,
+    "ast_hash": "2c47dccb4358ada2a03cab6265b2133c",
+    "semantic_hash": "2c47dccb4358ada2a03cab6265b2133c"
+  },
+  "frontend/manage_education.html": {
+    "mtime": 1768466265.0192673,
+    "ast_hash": "1efed5f17a5f1bccf7ee699ed5dcb8c1",
+    "semantic_hash": "1efed5f17a5f1bccf7ee699ed5dcb8c1"
+  },
+  "frontend/manage_experience.html": {
+    "mtime": 1768466265.0193636,
+    "ast_hash": "041894ff2338c44f05b8279151e86109",
+    "semantic_hash": "041894ff2338c44f05b8279151e86109"
+  },
+  "frontend/manage_personal_info.html": {
+    "mtime": 1768466265.0194693,
+    "ast_hash": "ad9156a73cc480494334b54a09e12443",
+    "semantic_hash": "ad9156a73cc480494334b54a09e12443"
+  },
+  "frontend/manage_projects.html": {
+    "mtime": 1768466265.0195513,
+    "ast_hash": "2c6afa4f1ef4dd4f39a76d78d08e3029",
+    "semantic_hash": "2c6afa4f1ef4dd4f39a76d78d08e3029"
+  },
+  "frontend/manage_references.html": {
+    "mtime": 1768466265.019633,
+    "ast_hash": "fbe0a6761ff40f7c1b2eab4542901919",
+    "semantic_hash": "fbe0a6761ff40f7c1b2eab4542901919"
+  },
+  "frontend/manage_skills.html": {
+    "mtime": 1768466265.0197313,
+    "ast_hash": "5276040cc5ec7523808a80e906d93b0e",
+    "semantic_hash": "5276040cc5ec7523808a80e906d93b0e"
+  },
+  "frontend/manage_summaries.html": {
+    "mtime": 1768466265.0198336,
+    "ast_hash": "1e1cb01ddc5fd3ebf8b0b17e4f562fdc",
+    "semantic_hash": "1e1cb01ddc5fd3ebf8b0b17e4f562fdc"
+  },
+  "frontend/register.html": {
+    "mtime": 1768466265.0199,
+    "ast_hash": "0eb2c754be6ecc2a3666274e228260ad",
+    "semantic_hash": "0eb2c754be6ecc2a3666274e228260ad"
+  },
+  "render.yaml": {
+    "mtime": 1768466265.0202458,
+    "ast_hash": "4f2df9036465a01adc26851757f61d0c",
+    "semantic_hash": "4f2df9036465a01adc26851757f61d0c"
+  },
+  "requirements.txt": {
+    "mtime": 1768466265.0203166,
+    "ast_hash": "dc613bea6e20e5c844c176c4e7d6dac5",
+    "semantic_hash": "dc613bea6e20e5c844c176c4e7d6dac5"
+  }
+}

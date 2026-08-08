@@ -34,10 +34,12 @@
     .item-block { 
         background: #f9f9f9; 
         padding: 16px; 
+        padding-left: 40px;
         margin: 8px 0; 
         border-radius: 4px; 
         position: relative; 
         border: 1px solid #e0e0e0;
+        transition: background-color 0.2s, transform 0.2s, opacity 0.2s;
     }
     .remove-btn { position: absolute; top: 10px; right: 10px; background: #e74c3c; border: none; color: white; padding: 5px 10px; border-radius: 3px; cursor: pointer; }
     .add-btn { margin-top: 10px; padding: 10px 15px; border: none; background: #007bff; color: white; border-radius: 4px; cursor: pointer; }
@@ -67,7 +69,8 @@
         border-radius: 4px;
         padding: 8px;
         margin-bottom: 5px;
-        transition: border-color 0.2s;
+        transition: border-color 0.2s, background-color 0.2s, transform 0.2s;
+        cursor: grab;
     }
     .bullet-point-input:focus-within {
         border-color: #007bff;
@@ -84,6 +87,57 @@
         width: 100%;
         box-shadow: none !important; /* Prevent any shadow effects */
         text-decoration: none !important; /* Prevent any underline from text-decoration */
+    }
+    /* Drag handle for bullet points */
+    .drag-handle {
+        cursor: grab;
+        padding: 0 8px;
+        color: #999;
+        font-size: 16px;
+        user-select: none;
+        display: flex;
+        align-items: center;
+    }
+    .drag-handle:active {
+        cursor: grabbing;
+    }
+    /* Dragging states */
+    .dragging {
+        opacity: 0.5;
+        background: #e3f2fd;
+    }
+    .drag-over {
+        border: 2px dashed #007bff;
+        background: #f0f7ff;
+    }
+    /* Item block drag handle */
+    .item-drag-handle {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        cursor: grab;
+        color: #999;
+        font-size: 18px;
+        user-select: none;
+        padding: 5px;
+        border-radius: 3px;
+        transition: background 0.2s;
+    }
+    .item-drag-handle:hover {
+        background: #eee;
+        color: #666;
+    }
+    .item-drag-handle:active {
+        cursor: grabbing;
+    }
+    .item-block.dragging {
+        opacity: 0.5;
+        background: #e3f2fd;
+        transform: scale(0.98);
+    }
+    .item-block.drag-over {
+        border: 2px dashed #007bff;
+        background: #f0f7ff;
     }
     .autocomplete-suggestions {
         border: 1px solid #ccc;
@@ -428,7 +482,8 @@
         // The containing div now handles the border and focus state.
         // The textarea has its border and outline removed via CSS.
         // The remove button is now styled via CSS to use the trash icon.
-        return `<div class="bullet-point-input">
+        return `<div class="bullet-point-input" draggable="true" ondragstart="handleBulletDragStart(event)" ondragend="handleBulletDragEnd(event)" ondragover="handleBulletDragOver(event)" ondragleave="handleBulletDragLeave(event)" ondrop="handleBulletDrop(event)">
+                    <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
                     <textarea name="${namePrefix}-${idx}-bullet-${pointIdx}" placeholder="Bullet point" oninput="${oninputAction}" onfocus="${onfocusAction}" onkeydown="handleKeydown(event, this.name)">${value}</textarea>
                     <button type="button" class="remove-bullet-btn" onclick="this.parentElement.remove()" title="Delete bullet point"></button>
                 </div>`;
@@ -484,7 +539,8 @@
       const idx = skillCount++;
       const bulletsHtml = (skill.bullet_points || [""]).map((point, i) => createBulletPointInput('skill', idx, i, point)).join('');
       const html = `
-        <div class="item-block" id="skills-${idx}">
+        <div class="item-block" id="skills-${idx}" draggable="true" ondragstart="handleItemDragStart(event)" ondragend="handleItemDragEnd(event)" ondragover="handleItemDragOver(event)" ondragleave="handleItemDragLeave(event)" ondrop="handleItemDrop(event)">
+          <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
           <input type="hidden" id="skill-${idx}-id" name="skill-${idx}-id">
           <button type="button" class="remove-btn" onclick="removeItem('skills', ${idx})">Remove</button>
           <label>Skill Name: ${createTextInput(`skill-${idx}-name`, 'e.g., Programming Languages', skill.skill_name || '', 'text', "setupAutocomplete('skill-" + idx + "-name', '/api/skills', " + idx + ")")}</label>
@@ -501,7 +557,8 @@
       const idx = expCount++;
       const bulletsHtml = (exp.bullet_points || [""]).map((point, i) => createBulletPointInput('exp', idx, i, point)).join('');
       const html = `
-        <div class="item-block" id="experience-${idx}">
+        <div class="item-block" id="experience-${idx}" draggable="true" ondragstart="handleItemDragStart(event)" ondragend="handleItemDragEnd(event)" ondragover="handleItemDragOver(event)" ondragleave="handleItemDragLeave(event)" ondrop="handleItemDrop(event)">
+          <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
           <input type="hidden" id="exp-${idx}-id" name="exp-${idx}-id">
           <button type="button" class="remove-btn" onclick="removeItem('experience', ${idx})">Remove</button>
           <label>Company/Role: ${createTextInput(`exp-${idx}-name`, 'e.g., Software Engineer at Tech Corp', exp.experience_name || '', 'text', "setupAutocomplete('exp-" + idx + "-name', '/api/experiences', " + idx + ")")}</label>
@@ -521,7 +578,8 @@
       const idx = projCount++;
       const bulletsHtml = (proj.bullet_points || [""]).map((point, i) => createBulletPointInput('proj', idx, i, point)).join('');
       const html = `
-        <div class="item-block" id="projects-${idx}">
+        <div class="item-block" id="projects-${idx}" draggable="true" ondragstart="handleItemDragStart(event)" ondragend="handleItemDragEnd(event)" ondragover="handleItemDragOver(event)" ondragleave="handleItemDragLeave(event)" ondrop="handleItemDrop(event)">
+          <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
           <input type="hidden" id="proj-${idx}-id" name="proj-${idx}-id">
           <button type="button" class="remove-btn" onclick="removeItem('projects', ${idx})">Remove</button>
           <label>Project Name: ${createTextInput(`proj-${idx}-name`, 'e.g., Personal Portfolio Website', proj.project_name || '', 'text', "setupAutocomplete('proj-" + idx + "-name', '/api/projects', " + idx + ")")}</label>
@@ -538,7 +596,8 @@
     function addEducation(edu = {}) {
       const idx = eduCount++;
       const html = `
-        <div class="item-block" id="education-${idx}">
+        <div class="item-block" id="education-${idx}" draggable="true" ondragstart="handleItemDragStart(event)" ondragend="handleItemDragEnd(event)" ondragover="handleItemDragOver(event)" ondragleave="handleItemDragLeave(event)" ondrop="handleItemDrop(event)">
+          <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
           <button type="button" class="remove-btn" onclick="removeItem('education', ${idx})">Remove</button>
           <label>Degree/Certificate: ${createTextInput(`edu-${idx}-name`, 'e.g., B.S. in Computer Science', edu.education_name || '', 'text', "setupAutocomplete('edu-" + idx + "-name', '/api/educations/names')")}</label>
           <div id="edu-${idx}-name-suggestions" class="autocomplete-suggestions"></div>
@@ -553,7 +612,8 @@
     function addReference(ref = {}) {
       const idx = refCount++;
       const html = `
-        <div class="item-block" id="references-${idx}">
+        <div class="item-block" id="references-${idx}" draggable="true" ondragstart="handleItemDragStart(event)" ondragend="handleItemDragEnd(event)" ondragover="handleItemDragOver(event)" ondragleave="handleItemDragLeave(event)" ondrop="handleItemDrop(event)">
+          <span class="item-drag-handle" title="Drag to reorder">⋮⋮</span>
           <button type="button" class="remove-btn" onclick="removeItem('references', ${idx})">Remove</button>
           <label>Referer Name: ${createTextInput(`ref-${idx}-name`, 'e.g., Dr. Jane Doe', ref.referer_name || '')}</label>
           <label>Referer Institute/Company: ${createTextInput(`ref-${idx}-institute`, 'e.g., Example University', ref.referer_institute || '')}</label>
@@ -942,7 +1002,7 @@
             templates.forEach(templateFile => {
                 const option = document.createElement('option');
                 option.value = templateFile;
-                option.textContent = templateFile.replace('.typ', '');
+                option.textContent = templateFile.replace('.html', '').replace(/_/g, ' ');
                 selectElement.appendChild(option);
             });
         } catch (error) {
@@ -954,6 +1014,173 @@
       loadTemplates();
       preloadUserProfile();
       preloadEducations();
+    }
+
+    // ==========================================
+    // DRAG AND DROP FUNCTIONALITY
+    // ==========================================
+
+    let draggedBullet = null;
+    let draggedItem = null;
+
+    // --- Bullet Point Drag and Drop ---
+    function handleBulletDragStart(e) {
+        draggedBullet = e.target.closest('.bullet-point-input');
+        if (!draggedBullet) return;
+        
+        draggedBullet.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', ''); // Required for Firefox
+        
+        // Stop propagation to prevent parent item from being dragged
+        e.stopPropagation();
+    }
+
+    function handleBulletDragEnd(e) {
+        if (draggedBullet) {
+            draggedBullet.classList.remove('dragging');
+            draggedBullet = null;
+        }
+        // Remove drag-over class from all bullet inputs
+        document.querySelectorAll('.bullet-point-input.drag-over').forEach(el => {
+            el.classList.remove('drag-over');
+        });
+    }
+
+    function handleBulletDragOver(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const target = e.target.closest('.bullet-point-input');
+        if (!target || target === draggedBullet || !draggedBullet) return;
+        
+        // Only allow drop within the same bullets container
+        const draggedContainer = draggedBullet.parentElement;
+        const targetContainer = target.parentElement;
+        if (draggedContainer !== targetContainer) return;
+        
+        e.dataTransfer.dropEffect = 'move';
+        target.classList.add('drag-over');
+    }
+
+    function handleBulletDragLeave(e) {
+        const target = e.target.closest('.bullet-point-input');
+        if (target) {
+            target.classList.remove('drag-over');
+        }
+    }
+
+    function handleBulletDrop(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const target = e.target.closest('.bullet-point-input');
+        if (!target || target === draggedBullet || !draggedBullet) return;
+        
+        // Only allow drop within the same bullets container
+        const draggedContainer = draggedBullet.parentElement;
+        const targetContainer = target.parentElement;
+        if (draggedContainer !== targetContainer) return;
+        
+        target.classList.remove('drag-over');
+        
+        // Get all bullet points in the container
+        const container = target.parentElement;
+        const bullets = Array.from(container.children);
+        const draggedIndex = bullets.indexOf(draggedBullet);
+        const targetIndex = bullets.indexOf(target);
+        
+        // Insert the dragged element before or after the target
+        if (draggedIndex < targetIndex) {
+            target.after(draggedBullet);
+        } else {
+            target.before(draggedBullet);
+        }
+    }
+
+    // --- Item Block (Skills, Experience, Projects, etc.) Drag and Drop ---
+    function handleItemDragStart(e) {
+        // Check if the drag started from the drag handle
+        const handle = e.target.closest('.item-drag-handle');
+        const itemBlock = e.target.closest('.item-block');
+        
+        if (!itemBlock) return;
+        
+        // If drag didn't start from handle, check if it started from a bullet (don't interfere)
+        if (!handle && e.target.closest('.bullet-point-input')) {
+            return; // Let bullet drag handle it
+        }
+        
+        draggedItem = itemBlock;
+        draggedItem.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', '');
+    }
+
+    function handleItemDragEnd(e) {
+        if (draggedItem) {
+            draggedItem.classList.remove('dragging');
+            draggedItem = null;
+        }
+        // Remove drag-over class from all item blocks
+        document.querySelectorAll('.item-block.drag-over').forEach(el => {
+            el.classList.remove('drag-over');
+        });
+    }
+
+    function handleItemDragOver(e) {
+        e.preventDefault();
+        
+        // If we're dragging a bullet, don't interfere
+        if (draggedBullet) return;
+        
+        const target = e.target.closest('.item-block');
+        if (!target || target === draggedItem || !draggedItem) return;
+        
+        // Only allow drop within the same section
+        const draggedSection = draggedItem.parentElement;
+        const targetSection = target.parentElement;
+        if (draggedSection !== targetSection) return;
+        
+        e.dataTransfer.dropEffect = 'move';
+        target.classList.add('drag-over');
+    }
+
+    function handleItemDragLeave(e) {
+        const target = e.target.closest('.item-block');
+        if (target && !target.contains(e.relatedTarget)) {
+            target.classList.remove('drag-over');
+        }
+    }
+
+    function handleItemDrop(e) {
+        e.preventDefault();
+        
+        // If we're dragging a bullet, don't interfere
+        if (draggedBullet) return;
+        
+        const target = e.target.closest('.item-block');
+        if (!target || target === draggedItem || !draggedItem) return;
+        
+        // Only allow drop within the same section
+        const draggedSection = draggedItem.parentElement;
+        const targetSection = target.parentElement;
+        if (draggedSection !== targetSection) return;
+        
+        target.classList.remove('drag-over');
+        
+        // Get all items in the section
+        const section = target.parentElement;
+        const items = Array.from(section.querySelectorAll('.item-block'));
+        const draggedIndex = items.indexOf(draggedItem);
+        const targetIndex = items.indexOf(target);
+        
+        // Insert the dragged element before or after the target
+        if (draggedIndex < targetIndex) {
+            target.after(draggedItem);
+        } else {
+            target.before(draggedItem);
+        }
     }
   </script>
   <div id="loading-overlay" class="loading-overlay">

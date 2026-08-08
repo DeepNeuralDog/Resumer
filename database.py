@@ -1,4 +1,4 @@
-from piccolo.engine.postgres import PostgresEngine
+from piccolo.engine.sqlite import SQLiteEngine
 from piccolo.table import Table, create_tables
 from piccolo.columns import (
     Serial, Varchar, Text, Boolean, ForeignKey, Timestamptz
@@ -6,25 +6,14 @@ from piccolo.columns import (
 from dotenv import load_dotenv
 import os
 import datetime
+from pathlib import Path
 
 load_dotenv()
 
-DB_HOST = os.getenv("PGHOST", "airadev-db.postgres.database.azure.com")
-DB_NAME = os.getenv("PGDATABASE", "postgres")
-DB_USER = os.getenv("PGUSER", "aira_pg_admin")
-DB_PASSWORD = os.getenv("PGPASSWORD", "Shoktishali007")
-DB_PORT = os.getenv("PGPORT", "5432")
+# SQLite database file in workspace
+DB_PATH = os.getenv("SQLITE_DB_PATH", str(Path(__file__).parent / "resumer.db"))
 
-engine = PostgresEngine(
-    config={
-        "host": DB_HOST,
-        "database": DB_NAME,
-        "user": DB_USER,
-        "password": DB_PASSWORD,
-        "port": int(DB_PORT),
-    },
-    extensions=[]
-)
+engine = SQLiteEngine(path=DB_PATH)
 
 
 
