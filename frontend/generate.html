@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Resumer</title>
+  <!-- html2pdf.js for client-side PDF generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0; padding: 0; }
     .container { max-width: 90%; margin: 40px auto; background: #fff; padding: 32px; border-radius: 10px; box-shadow: 0 2px 8px #0001; } /* Increased max-width */
@@ -772,9 +774,135 @@
           body: JSON.stringify(data)
         });
         if (!res.ok) { alert('Failed to generate PDF. Check console for details.'); console.error(await res.text()); return; }
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        document.getElementById('preview').innerHTML = `<iframe src="${url}"></iframe><br><a href="${url}" download="resume.pdf">Download PDF</a>`;
+        
+        const result = await res.json();
+        
+        if (result.error) {
+          alert('Error: ' + result.error);
+          return;
+        }
+        
+        // Parse the HTML to extract styles and body content
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(result.html, 'text/html');
+        
+        // Create a Shadow DOM container for style isolation
+        const container = document.createElement('div');
+        container.id = 'pdf-render-container';
+        container.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 210mm;
+          min-height: 297mm;
+          background: white;
+          z-index: 99999;
+          overflow: visible;
+          padding: 0;
+          margin: 0;
+        `;
+        
+        // Create shadow root for style isolation
+        const shadow = container.attachShadow({ mode: 'open' });
+        
+        // Extract and copy styles
+        const styles = doc.querySelectorAll('style');
+        styles.forEach(style => {
+          const newStyle = document.createElement('style');
+          newStyle.textContent = style.textContent;
+          shadow.appendChild(newStyle);
+        });
+        
+        // Add the body content
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = doc.body.innerHTML;
+        shadow.appendChild(wrapper);
+        
+        // Add to document
+        document.body.appendChild(container);
+        
+        // Wait for rendering
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // html2canvas can't capture shadow DOM directly, so we need to clone the content
+        // Create a temporary element with the styles inlined
+        const tempContainer = document.createElement('div');
+        tempContainer.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 210mm;
+          min-height: 297mm;
+          background: white;
+          z-index: 99999;
+          overflow: visible;
+          padding: 0;
+          margin: 0;
+        `;
+        
+        // Copy all styles into the temp container
+        styles.forEach(style => {
+          const newStyle = document.createElement('style');
+          newStyle.textContent = style.textContent;
+          tempContainer.appendChild(newStyle);
+        });
+        
+        // Copy body content
+        const contentDiv = document.createElement('div');
+        contentDiv.innerHTML = doc.body.innerHTML;
+        tempContainer.appendChild(contentDiv);
+        
+        // Remove shadow container and add temp container
+        document.body.removeChild(container);
+        document.body.appendChild(tempContainer);
+        
+        // Wait for styles to apply
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Configure html2pdf options with margins
+        const opt = {
+          margin: [10, 10, 10, 10], // top, left, bottom, right in mm
+          filename: result.filename || 'resume.pdf',
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { 
+            scale: 2, 
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            width: tempContainer.scrollWidth,
+            height: tempContainer.scrollHeight,
+            x: 0,
+            y: 0,
+            scrollX: 0,
+            scrollY: 0
+          },
+          jsPDF: { 
+            unit: 'mm', 
+            format: 'a4', 
+            orientation: 'portrait' 
+          }
+        };
+        
+        // Generate PDF
+        const pdfBlob = await html2pdf().set(opt).from(tempContainer).outputPdf('blob');
+        
+        // Clean up
+        document.body.removeChild(tempContainer);
+        
+        // Create download URL and display preview
+        const url = URL.createObjectURL(pdfBlob);
+        document.getElementById('preview').innerHTML = `
+          <iframe src="${url}" style="width: 100%; height: 600px; border: 1px solid #ccc;"></iframe>
+          <br>
+          <a href="${url}" download="${result.filename || 'resume.pdf'}" 
+             style="display: inline-block; margin-top: 10px; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 4px;">
+            Download PDF
+          </a>
+        `;
+        
+      } catch (error) {
+        console.error('PDF generation error:', error);
+        alert('Failed to generate PDF. See console for details.');
       } finally {
         setLoading(false);
       }
