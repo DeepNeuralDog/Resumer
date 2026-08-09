@@ -1,4 +1,4 @@
-"""PDF generation routes - returns rendered HTML for client-side PDF."""
+"""PDF generation routes - generates PDF server-side with xhtml2pdf."""
 import os
 import base64
 import io
@@ -6,9 +6,10 @@ import logging
 from typing import List
 
 from fastapi import APIRouter, Request, Depends, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import jinja2
 from PIL import Image
+from xhtml2pdf import pisa
 
 from app.models import ResumeData, Experience, Education
 from app.auth import get_current_user
@@ -87,6 +88,27 @@ def save_resume_data(conn, data: ResumeData, user_id: int):
                 )
 
 
+def convert_html_to_pdf(html_content: str) -> tuple[bytes | None, bool]:
+    """
+    Convert HTML content to PDF using xhtml2pdf.
+    Returns tuple of (pdf_bytes, success_status).
+    """
+    result_buffer = io.BytesIO()
+    
+    # Convert HTML to PDF
+    pisa_status = pisa.CreatePDF(
+        src=html_content,
+        dest=result_buffer,
+        encoding='utf-8'
+    )
+    
+    if pisa_status.err:
+        return None, False
+    
+    pdf_bytes = result_buffer.getvalue()
+    return pdf_bytes, True
+
+
 @router.post("/generate-pdf")
 async def generate_pdf(
     data: ResumeData,
@@ -94,8 +116,8 @@ async def generate_pdf(
     user: dict = Depends(get_current_user)
 ):
     """
-    Generate resume HTML for client-side PDF conversion.
-    Returns rendered HTML that frontend converts to PDF using html2pdf.js
+    Generate resume PDF server-side using xhtml2pdf.
+    Returns PDF binary directly, or falls back to HTML for client-side generation.
     """
     try:
         # Run ATS optimization if job description provided and LLM available
@@ -203,11 +225,37 @@ async def generate_pdf(
             references=[r.model_dump() for r in data.references]
         )
 
-        # Return HTML for client-side PDF generation
-        return JSONResponse({
-            "html": html_content,
-            "filename": "resume.pdf"
-        })
+        # Check if client prefers HTML fallback (for client-side PDF generation)
+        prefer_html = request.headers.get("X-Prefer-HTML", "false").lower() == "true"
+        
+        if prefer_html:
+            # Return HTML for client-side PDF generation (fallback mode)
+            return JSONResponse({
+                "html": html_content,
+                "filename": "resume.pdf",
+                "fallback": True
+            })
+
+        # Generate PDF server-side using xhtml2pdf
+        pdf_bytes, success = convert_html_to_pdf(html_content)
+        
+        if not success or pdf_bytes is None:
+            logging.warning("Server-side PDF generation failed, returning HTML for fallback")
+            # Return HTML for client-side fallback
+            return JSONResponse({
+                "html": html_content,
+                "filename": "resume.pdf",
+                "fallback": True
+            })
+
+        # Return PDF binary directly
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": "attachment; filename=resume.pdf"
+            }
+        )
 
     except Exception as e:
         import traceback

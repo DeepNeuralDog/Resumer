@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ name }} - Resume</title>
     <style>
-        /* Reset and Base Styles */
+        /* Reset and Base Styles - xhtml2pdf compatible */
         * {
             margin: 0;
             padding: 0;
@@ -18,7 +18,7 @@
         }
 
         body {
-            font-family: 'Computer Modern Serif', 'Times New Roman', Georgia, serif;
+            font-family: 'Times New Roman', Georgia, serif;
             font-size: 10.75pt;
             line-height: 1.4;
             color: #000;
@@ -27,87 +27,84 @@
             padding: 1cm;
         }
 
-        /* Header Styles */
+        /* Header Styles - using tables for xhtml2pdf compatibility */
         .header {
-            display: flex;
-            gap: 0.6cm;
             margin-bottom: 0.5em;
+            width: 100%;
         }
 
-        .header-with-image {
-            align-items: flex-start;
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
         }
 
-        .header-no-image {
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
+        .header-table td {
+            vertical-align: top;
+            padding: 0;
         }
 
-        .header-no-image .contact-info {
-            justify-content: center;
-        }
-
-        .profile-image {
+        .profile-image-cell {
             width: 3.5cm;
-            height: auto;
-            flex-shrink: 0;
+            padding-right: 2cm;
+        }
+
+        .header-content-cell {
+            vertical-align: top;
+        }
+
+        .header-spacer {
+            height: 1cm;
         }
 
         .profile-image img {
-            width: 100%;
+            width: 3.5cm;
             height: auto;
-            object-fit: cover;
         }
 
-        .header-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
+        .header-no-image {
+            text-align: center;
         }
 
         .name {
             font-size: 16pt;
             font-weight: 700;
             margin-bottom: 0.3em;
-            text-align: left;
         }
 
         .name-with-image {
             font-size: 14pt;
             font-weight: 700;
+            margin-bottom: 0.5em;
+            margin-left: 0.5em;
         }
 
         /* Contact Information */
         .contact-info {
-            display: flex;
-            flex-direction: column;
-            gap: 0.3em;
-            align-items: flex-start;
+            font-size: 10pt;
+            margin-top: 0.5em;
+            margin-left: 0.5em;
         }
 
         .contact-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5em;
-            font-size: 10pt;
+            margin-bottom: 0.2em;
+            margin-left: 0.5em;
         }
 
-        .contact-icon {
-            display: inline-block;
-            width: 1.2em;
-            text-align: center;
-            font-size: 11pt;
-            vertical-align: middle;
+        .contact-inline {
+            display: inline;
+            margin-right: 1em;
+        }
+
+        .contact-label {
+            display: inline;
+            font-weight: bold;
+            font-size: 10pt;
+            margin-right: 0.3em;
+            margin-left: 0.5em;
         }
 
         .contact-item a {
-            color: inherit;
-            text-decoration: none;
-        }
-
-        .contact-item a:hover {
+            color: #0066cc;
             text-decoration: underline;
         }
 
@@ -120,15 +117,20 @@
             font-size: 14pt;
             font-weight: bold;
             margin-bottom: 0.3em;
-            border-bottom: 0.4pt solid #000;
+            border-bottom: 1px solid #000;
             padding-bottom: 0.1em;
         }
 
-        /* Skills Section */
-        .skills-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0.4cm;
+        /* Skills Section - using table for two-column layout */
+        .skills-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .skills-table td {
+            width: 50%;
+            vertical-align: top;
+            padding: 0 0.2cm 0.3em 0;
         }
 
         .skill-item {
@@ -141,28 +143,21 @@
             margin-bottom: 0.2em;
         }
 
-        .skill-name::before {
-            content: "\25B6\25B6 ";
-            font-size: 8pt;
+        /* Section item markers - using >> for xhtml2pdf compatibility */
+        .item-marker {
+            font-weight: bold;
+            margin-right: 0.3em;
         }
 
         /* Bullet Points */
         .bullet-list {
-            list-style: none;
-            padding-left: 0;
+            list-style-type: disc;
+            padding-left: 1.5em;
+            margin: 0;
         }
 
         .bullet-list li {
-            position: relative;
-            padding-left: 1em;
             margin-bottom: 0.1em;
-        }
-
-        .bullet-list li::before {
-            content: "\2022";
-            position: absolute;
-            left: 0;
-            font-size: 9pt;
         }
 
         /* Experience, Projects Sections */
@@ -171,20 +166,12 @@
         }
 
         .entry-header {
-            display: flex;
-            align-items: baseline;
-            flex-wrap: wrap;
-            gap: 0.3em;
+            margin-bottom: 0.2em;
         }
 
         .entry-title {
-            font-weight: 600;
+            font-weight: bold;
             font-size: 12pt;
-        }
-
-        .entry-title::before {
-            content: "\25B6\25B6 ";
-            font-size: 8pt;
         }
 
         .entry-dates {
@@ -197,11 +184,7 @@
         }
 
         .entry-link a {
-            color: #000;
-            text-decoration: none;
-        }
-
-        .entry-link a:hover {
+            color: #0066cc;
             text-decoration: underline;
         }
 
@@ -211,17 +194,12 @@
         }
 
         .education-title {
-            font-weight: 600;
+            font-weight: bold;
             font-size: 12pt;
         }
 
-        .education-title::before {
-            content: "\25B6\25B6 ";
-            font-size: 8pt;
-        }
-
         .education-institution {
-            font-weight: 550;
+            font-weight: 600;
             margin-left: 1.5em;
         }
 
@@ -235,99 +213,112 @@
         }
 
         .reference-name {
-            font-weight: 600;
+            font-weight: bold;
         }
 
         .reference-position {
-            font-weight: 550;
+            font-weight: 600;
         }
 
         .reference-connection {
-            font-weight: 550;
+            font-weight: 600;
         }
 
         /* Summary Section */
         .summary-text {
             text-align: justify;
         }
+
+        /* Link styles for PDF - ensure links are visible and clickable */
+        a {
+            color: #0066cc;
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
     <!-- Header Section -->
     {% if image_data_uri %}
-    <div class="header header-with-image">
-        <div class="profile-image">
-            <img src="{{ image_data_uri }}" alt="{{ name }}">
-        </div>
-        <div class="header-content">
-            <h1 class="name name-with-image">{{ name }}</h1>
-            <div class="contact-info">
-                {% if contact.email %}
-                <div class="contact-item">
-                    <span class="contact-icon">&#9993;</span>
-                    <span>{{ contact.email }}</span>
-                </div>
-                {% endif %}
-                {% if contact.phone %}
-                <div class="contact-item">
-                    <span class="contact-icon">&#9742;</span>
-                    <span>{{ contact.phone }}</span>
-                </div>
-                {% endif %}
-                {% if contact.location %}
-                <div class="contact-item">
-                    <span class="contact-icon">&#9906;</span>
-                    <span>{{ contact.location }}</span>
-                </div>
-                {% endif %}
-                {% if contact.linkedin %}
-                <div class="contact-item">
-                    <span class="contact-icon">in</span>
-                    <a href="https://{{ contact.linkedin | replace('https://', '') }}">{{ contact.linkedin }}</a>
-                </div>
-                {% endif %}
-                {% if contact.github %}
-                <div class="contact-item">
-                    <span class="contact-icon">&#128187;</span>
-                    <a href="https://{{ contact.github | replace('https://', '') }}">{{ contact.github }}</a>
-                </div>
-                {% endif %}
-            </div>
-        </div>
+    <div class="header">
+        <table class="header-table">
+            <tr>
+                <td class="profile-image-cell">
+                    <div class="profile-image">
+                        <img src="{{ image_data_uri }}" alt="{{ name }}">
+                    </div>
+                </td>
+                <td class="header-content-cell">
+                    <pdf:spacer height=".1cm"/>
+                    <h1 class="name-with-image">{{ name }}</h1>
+                    <div class="contact-info">
+                        {% if contact.email %}
+                        <div class="contact-item">
+                            <span class="contact-label">Email:</span>
+                            <span>{{ contact.email }}</span>
+                        </div>
+                        {% endif %}
+                        {% if contact.phone %}
+                        <div class="contact-item">
+                            <span class="contact-label">Phone:</span>
+                            <span>{{ contact.phone }}</span>
+                        </div>
+                        {% endif %}
+                        {% if contact.location %}
+                        <div class="contact-item">
+                            <span class="contact-label">Location:</span>
+                            <span>{{ contact.location }}</span>
+                        </div>
+                        {% endif %}
+                        {% if contact.linkedin %}
+                        <div class="contact-item">
+                            <span class="contact-label">LinkedIn:</span>
+                            <a href="https://{{ contact.linkedin | replace('https://', '') }}">{{ contact.linkedin }}</a>
+                        </div>
+                        {% endif %}
+                        {% if contact.github %}
+                        <div class="contact-item">
+                            <span class="contact-label">GitHub:</span>
+                            <a href="https://{{ contact.github | replace('https://', '') }}">{{ contact.github }}</a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+        </table>
     </div>
     {% else %}
     <div class="header header-no-image">
         <h1 class="name">{{ name }}</h1>
-        <div class="contact-info" style="flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 1em;">
+        <div class="contact-info">
             {% if contact.email %}
-            <div class="contact-item">
-                <span class="contact-icon">&#9993;</span>
+            <span class="contact-inline">
+                <span class="contact-label">Email:</span>
                 <span>{{ contact.email }}</span>
-            </div>
+            </span>
             {% endif %}
             {% if contact.phone %}
-            <div class="contact-item">
-                <span class="contact-icon">&#9742;</span>
+            <span class="contact-inline">
+                <span class="contact-label">Phone:</span>
                 <span>{{ contact.phone }}</span>
-            </div>
+            </span>
             {% endif %}
             {% if contact.location %}
-            <div class="contact-item">
-                <span class="contact-icon">&#9906;</span>
+            <span class="contact-inline">
+                <span class="contact-label">Location:</span>
                 <span>{{ contact.location }}</span>
-            </div>
+            </span>
             {% endif %}
             {% if contact.linkedin %}
-            <div class="contact-item">
-                <span class="contact-icon">in</span>
+            <span class="contact-inline">
+                <span class="contact-label">LinkedIn:</span>
                 <a href="https://{{ contact.linkedin | replace('https://', '') }}">{{ contact.linkedin }}</a>
-            </div>
+            </span>
             {% endif %}
             {% if contact.github %}
-            <div class="contact-item">
-                <span class="contact-icon">&#128187;</span>
+            <span class="contact-inline">
+                <span class="contact-label">GitHub:</span>
                 <a href="https://{{ contact.github | replace('https://', '') }}">{{ contact.github }}</a>
-            </div>
+            </span>
             {% endif %}
         </div>
     </div>
@@ -345,20 +336,31 @@
     {% if skills and skills|length > 0 %}
     <div class="section">
         <h2 class="section-title">Skills</h2>
-        <div class="skills-grid">
+        <table class="skills-table">
             {% for skill in skills %}
-            <div class="skill-item">
-                <div class="skill-name">{{ skill.skill_name }}</div>
-                {% if skill.bullet_points and skill.bullet_points|length > 0 %}
-                <ul class="bullet-list">
-                    {% for point in skill.bullet_points %}
-                    <li>{{ point }}</li>
-                    {% endfor %}
-                </ul>
-                {% endif %}
-            </div>
+            {% if loop.index is odd %}
+            <tr>
+            {% endif %}
+                <td>
+                    <div class="skill-item">
+                        <div class="skill-name"><span class="item-marker">&gt;&gt;</span> {{ skill.skill_name }}</div>
+                        {% if skill.bullet_points and skill.bullet_points|length > 0 %}
+                        <ul class="bullet-list">
+                            {% for point in skill.bullet_points %}
+                            <li>{{ point }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                </td>
+            {% if loop.index is even or loop.last %}
+            {% if loop.index is odd and loop.last %}
+                <td></td>
+            {% endif %}
+            </tr>
+            {% endif %}
             {% endfor %}
-        </div>
+        </table>
     </div>
     {% endif %}
 
@@ -369,7 +371,7 @@
         {% for exp in experience %}
         <div class="entry">
             <div class="entry-header">
-                <span class="entry-title">{{ exp.experience_name }}</span>
+                <span class="entry-title"><span class="item-marker">&gt;&gt;</span> {{ exp.experience_name }}</span>
                 {% if exp.start_year or exp.end_year %}
                 <span class="entry-dates">
                     ({% if exp.start_year %}{{ exp.start_year }}{% endif %}{% if exp.start_year and exp.end_year %} - {% endif %}{% if exp.end_year %}{{ exp.end_year }}{% elif exp.start_year %}Present{% endif %})
@@ -395,7 +397,7 @@
         {% for proj in projects %}
         <div class="entry">
             <div class="entry-header">
-                <span class="entry-title">{{ proj.project_name }}</span>
+                <span class="entry-title"><span class="item-marker">&gt;&gt;</span> {{ proj.project_name }}</span>
                 {% if proj.github_link %}
                 <span class="entry-link">(<a href="https://{{ proj.github_link | replace('https://', '') }}">{{ proj.github_link }}</a>)</span>
                 {% endif %}
@@ -418,11 +420,11 @@
         <h2 class="section-title">Education</h2>
         {% for edu in education %}
         <div class="education-entry">
-            <div class="education-title">{{ edu.education_name }}</div>
+            <div class="education-title"><span class="item-marker">&gt;&gt;</span> {{ edu.education_name }}</div>
             <div class="education-institution">
                 {{ edu.institution }}
                 {% if edu.start or edu.end %}
-                <span style="font-size: 9pt;">
+                <span class="entry-dates">
                     ({% if edu.start %}{{ edu.start }}{% endif %}{% if edu.start and edu.end %} - {% endif %}{% if edu.end %}{{ edu.end }}{% elif edu.start %}Present{% endif %})
                 </span>
                 {% endif %}

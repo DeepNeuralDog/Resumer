@@ -760,11 +760,133 @@
     }
 
 
+    /**
+     * Client-side PDF generation using html2pdf.js (fallback method)
+     * This creates image-based PDFs - text is not selectable, links not clickable
+     */
+    async function generatePDFClientSide(htmlContent, filename) {
+      // Parse the HTML to extract styles and body content
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlContent, 'text/html');
+      
+      // Create a Shadow DOM container for style isolation
+      const container = document.createElement('div');
+      container.id = 'pdf-render-container';
+      container.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 210mm;
+        min-height: 297mm;
+        background: white;
+        z-index: 99999;
+        overflow: visible;
+        padding: 0;
+        margin: 0;
+      `;
+      
+      // Create shadow root for style isolation
+      const shadow = container.attachShadow({ mode: 'open' });
+      
+      // Extract and copy styles
+      const styles = doc.querySelectorAll('style');
+      styles.forEach(style => {
+        const newStyle = document.createElement('style');
+        newStyle.textContent = style.textContent;
+        shadow.appendChild(newStyle);
+      });
+      
+      // Add the body content
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = doc.body.innerHTML;
+      shadow.appendChild(wrapper);
+      
+      // Add to document
+      document.body.appendChild(container);
+      
+      // Wait for rendering
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // html2canvas can't capture shadow DOM directly, so we need to clone the content
+      // Create a temporary element with the styles inlined
+      const tempContainer = document.createElement('div');
+      tempContainer.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 210mm;
+        min-height: 297mm;
+        background: white;
+        z-index: 99999;
+        overflow: visible;
+        padding: 0;
+        margin: 0;
+      `;
+      
+      // Copy all styles into the temp container
+      styles.forEach(style => {
+        const newStyle = document.createElement('style');
+        newStyle.textContent = style.textContent;
+        tempContainer.appendChild(newStyle);
+      });
+      
+      // Copy body content
+      const contentDiv = document.createElement('div');
+      contentDiv.innerHTML = doc.body.innerHTML;
+      tempContainer.appendChild(contentDiv);
+      
+      // Remove shadow container and add temp container
+      document.body.removeChild(container);
+      document.body.appendChild(tempContainer);
+      
+      // Wait for styles to apply
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Configure html2pdf options with margins
+      const opt = {
+        margin: [10, 10, 10, 10], // top, left, bottom, right in mm
+        filename: filename || 'resume.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          width: tempContainer.scrollWidth,
+          height: tempContainer.scrollHeight,
+          x: 0,
+          y: 0,
+          scrollX: 0,
+          scrollY: 0
+        },
+        jsPDF: { 
+          unit: 'mm', 
+          format: 'a4', 
+          orientation: 'portrait' 
+        }
+      };
+      
+      // Generate PDF
+      const pdfBlob = await html2pdf().set(opt).from(tempContainer).outputPdf('blob');
+      
+      // Clean up
+      document.body.removeChild(tempContainer);
+      
+      return pdfBlob;
+    }
+
+    /**
+     * Main PDF generation function
+     * Attempts server-side generation first (produces real PDFs with selectable text and clickable links)
+     * Falls back to client-side html2pdf.js if server-side fails
+     */
     async function generatePDF() {
       setLoading(true);
       try {
         const data = await getFormData();
         const selectedTemplate = document.getElementById('template-select').value;
+        
+        // Request PDF from server
         const res = await fetch('/generate-pdf', {
           method: 'POST',
           headers: {
@@ -773,128 +895,56 @@
           },
           body: JSON.stringify(data)
         });
-        if (!res.ok) { alert('Failed to generate PDF. Check console for details.'); console.error(await res.text()); return; }
         
-        const result = await res.json();
-        
-        if (result.error) {
-          alert('Error: ' + result.error);
-          return;
+        if (!res.ok) { 
+          alert('Failed to generate PDF. Check console for details.'); 
+          console.error(await res.text()); 
+          return; 
         }
         
-        // Parse the HTML to extract styles and body content
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(result.html, 'text/html');
+        const contentType = res.headers.get('Content-Type');
+        let pdfBlob;
+        let filename = 'resume.pdf';
         
-        // Create a Shadow DOM container for style isolation
-        const container = document.createElement('div');
-        container.id = 'pdf-render-container';
-        container.style.cssText = `
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 210mm;
-          min-height: 297mm;
-          background: white;
-          z-index: 99999;
-          overflow: visible;
-          padding: 0;
-          margin: 0;
-        `;
-        
-        // Create shadow root for style isolation
-        const shadow = container.attachShadow({ mode: 'open' });
-        
-        // Extract and copy styles
-        const styles = doc.querySelectorAll('style');
-        styles.forEach(style => {
-          const newStyle = document.createElement('style');
-          newStyle.textContent = style.textContent;
-          shadow.appendChild(newStyle);
-        });
-        
-        // Add the body content
-        const wrapper = document.createElement('div');
-        wrapper.innerHTML = doc.body.innerHTML;
-        shadow.appendChild(wrapper);
-        
-        // Add to document
-        document.body.appendChild(container);
-        
-        // Wait for rendering
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // html2canvas can't capture shadow DOM directly, so we need to clone the content
-        // Create a temporary element with the styles inlined
-        const tempContainer = document.createElement('div');
-        tempContainer.style.cssText = `
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 210mm;
-          min-height: 297mm;
-          background: white;
-          z-index: 99999;
-          overflow: visible;
-          padding: 0;
-          margin: 0;
-        `;
-        
-        // Copy all styles into the temp container
-        styles.forEach(style => {
-          const newStyle = document.createElement('style');
-          newStyle.textContent = style.textContent;
-          tempContainer.appendChild(newStyle);
-        });
-        
-        // Copy body content
-        const contentDiv = document.createElement('div');
-        contentDiv.innerHTML = doc.body.innerHTML;
-        tempContainer.appendChild(contentDiv);
-        
-        // Remove shadow container and add temp container
-        document.body.removeChild(container);
-        document.body.appendChild(tempContainer);
-        
-        // Wait for styles to apply
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // Configure html2pdf options with margins
-        const opt = {
-          margin: [10, 10, 10, 10], // top, left, bottom, right in mm
-          filename: result.filename || 'resume.pdf',
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { 
-            scale: 2, 
-            useCORS: true,
-            logging: false,
-            backgroundColor: '#ffffff',
-            width: tempContainer.scrollWidth,
-            height: tempContainer.scrollHeight,
-            x: 0,
-            y: 0,
-            scrollX: 0,
-            scrollY: 0
-          },
-          jsPDF: { 
-            unit: 'mm', 
-            format: 'a4', 
-            orientation: 'portrait' 
+        // Check if server returned a PDF directly (server-side generation succeeded)
+        if (contentType && contentType.includes('application/pdf')) {
+          // Server generated PDF successfully - this has selectable text and clickable links
+          pdfBlob = await res.blob();
+          // Extract filename from Content-Disposition header if present
+          const disposition = res.headers.get('Content-Disposition');
+          if (disposition) {
+            const filenameMatch = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+            if (filenameMatch && filenameMatch[1]) {
+              filename = filenameMatch[1].replace(/['"]/g, '');
+            }
           }
-        };
-        
-        // Generate PDF
-        const pdfBlob = await html2pdf().set(opt).from(tempContainer).outputPdf('blob');
-        
-        // Clean up
-        document.body.removeChild(tempContainer);
+          console.log('PDF generated server-side (text selectable, links clickable)');
+        } else {
+          // Server returned JSON - need to use client-side fallback
+          const result = await res.json();
+          
+          if (result.error) {
+            alert('Error: ' + result.error);
+            return;
+          }
+          
+          if (result.html) {
+            // Use client-side html2pdf.js as fallback
+            console.log('Using client-side PDF generation (fallback mode - text not selectable)');
+            pdfBlob = await generatePDFClientSide(result.html, result.filename);
+            filename = result.filename || 'resume.pdf';
+          } else {
+            alert('Unexpected response from server');
+            return;
+          }
+        }
         
         // Create download URL and display preview
         const url = URL.createObjectURL(pdfBlob);
         document.getElementById('preview').innerHTML = `
           <iframe src="${url}" style="width: 100%; height: 600px; border: 1px solid #ccc;"></iframe>
           <br>
-          <a href="${url}" download="${result.filename || 'resume.pdf'}" 
+          <a href="${url}" download="${filename}" 
              style="display: inline-block; margin-top: 10px; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 4px;">
             Download PDF
           </a>
